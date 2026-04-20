@@ -86,8 +86,8 @@ export default function Nav() {
 
       {/* ── Desktop (md and above) ── */}
       <div className="hidden md:flex items-center gap-1">
-        {navLink('/players', 'Players')}
-        {navLink('/feed', 'Feed')}
+        {userId && navLink('/players', 'Players')}
+        {userId && navLink('/feed', 'Feed')}
         <div className="flex items-center gap-2 ml-2">
           {userId ? (
             <>
