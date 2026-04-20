@@ -1,44 +1,11 @@
 import Link from 'next/link'
+import Nav from '@/components/Nav'
 
 export default function Home() {
   return (
     <div className="min-h-screen bg-navy text-cream font-body">
 
-      {/* NAV */}
-      <nav className="sticky top-0 z-50 bg-navy border-b-2 border-dirt flex items-center justify-between px-4 md:px-6 h-16">
-        <div className="flex items-center gap-2">
-          <div className="w-7 h-7 rounded-full bg-cream flex-shrink-0" />
-          <span className="font-display text-2xl md:text-3xl tracking-wide text-cream">
-            Catch<span className="text-dirt">Up</span>
-          </span>
-        </div>
-        {/* Desktop nav */}
-        <div className="hidden md:flex items-center gap-1">
-          <Link href="/players" className="font-condensed font-semibold tracking-widest uppercase text-sm px-4 py-2 rounded text-cream-dark hover:text-dirt hover:bg-dirt/10 transition-colors">
-            Players
-          </Link>
-          <Link href="/events" className="font-condensed font-semibold tracking-widest uppercase text-sm px-4 py-2 rounded text-cream-dark hover:text-dirt hover:bg-dirt/10 transition-colors">
-            Events
-          </Link>
-          <div className="flex items-center gap-2 ml-2">
-            <Link href="/auth?tab=login" className="font-condensed font-bold tracking-widest uppercase text-sm px-5 py-2 rounded border border-dirt text-dirt hover:bg-dirt/10 transition-colors">
-              Log In
-            </Link>
-            <Link href="/auth?tab=signup" className="font-condensed font-bold tracking-widest uppercase text-sm px-5 py-2 rounded bg-dirt text-navy hover:bg-dirt-dark transition-colors">
-              Sign Up
-            </Link>
-          </div>
-        </div>
-        {/* Mobile nav */}
-        <div className="flex md:hidden items-center gap-2">
-          <Link href="/auth?tab=login" className="font-condensed font-bold tracking-widest uppercase text-xs px-3 py-1.5 rounded border border-dirt text-dirt whitespace-nowrap">
-            Log In
-          </Link>
-          <Link href="/auth?tab=signup" className="font-condensed font-bold tracking-widest uppercase text-xs px-3 py-1.5 rounded bg-dirt text-navy whitespace-nowrap">
-            Sign Up
-          </Link>
-        </div>
-      </nav>
+      <Nav />
 
       {/* HERO */}
       <section
