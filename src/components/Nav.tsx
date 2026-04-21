@@ -10,6 +10,7 @@ export default function Nav() {
   const pathname = usePathname()
   const [userId, setUserId] = useState<string | null>(null)
   const [firstName, setFirstName] = useState<string | null>(null)
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
   const [menuOpen, setMenuOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
 
@@ -17,10 +18,13 @@ export default function Nav() {
     async function fetchFirstName(uid: string) {
       const { data } = await supabase
         .from('profiles')
-        .select('first_name')
+        .select('first_name, avatar_url')
         .eq('id', uid)
         .single()
-      if (data) setFirstName(data.first_name ?? null)
+      if (data) {
+        setFirstName(data.first_name ?? null)
+        setAvatarUrl(data.avatar_url ?? null)
+      }
     }
 
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -33,7 +37,7 @@ export default function Nav() {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, session) => {
       setUserId(session?.user.id ?? null)
       if (session) fetchFirstName(session.user.id)
-      else setFirstName(null)
+      else { setFirstName(null); setAvatarUrl(null) }
     })
 
     return () => subscription.unsubscribe()
@@ -92,10 +96,18 @@ export default function Nav() {
           {userId ? (
             <>
               <Link
-                href="/profile/setup"
-                className="font-condensed font-semibold tracking-widest uppercase text-sm px-4 py-2 rounded text-cream-dark hover:text-dirt hover:bg-dirt/10 transition-colors"
+                href="/profile"
+                className="font-condensed font-semibold tracking-widest uppercase text-sm px-3 py-2 rounded text-cream-dark hover:text-dirt hover:bg-dirt/10 transition-colors"
+                style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
               >
-                {firstName ? `Hey, ${firstName}` : 'My Profile'}
+                {avatarUrl ? (
+                  <img src={avatarUrl} alt="" style={{ width: 26, height: 26, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
+                ) : (
+                  <div style={{ width: 26, height: 26, borderRadius: '50%', background: '#c4822a', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Bebas Neue', sans-serif", fontSize: 10, color: '#0d1f3c', letterSpacing: '0.04em' }}>
+                    {firstName ? firstName[0].toUpperCase() : '?'}
+                  </div>
+                )}
+                {firstName ?? 'My Profile'}
               </Link>
               <button
                 onClick={handleLogOut}
@@ -166,6 +178,7 @@ export default function Nav() {
               }}>
                 {navLink('/players', 'Players', true)}
                 {navLink('/feed', 'Feed', true)}
+                {navLink('/profile', firstName ?? 'My Profile', true)}
                 <div style={{ borderTop: '1px solid rgba(196,130,42,0.2)', margin: '4px 0' }} />
                 <button
                   onClick={handleLogOut}
