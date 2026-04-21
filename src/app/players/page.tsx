@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { AuthenticatedLayout } from '@/app/layout-authenticated'
@@ -20,6 +20,26 @@ type Profile = {
   bio: string | null
   avatar_url: string | null
   vouches: number | null
+}
+
+type PlayingHistory = {
+  id: string
+  team_name: string
+  level: string | null
+  position: string | null
+  year_start: number | null
+  year_end: number | null
+  is_current: boolean
+  notes: string | null
+}
+
+type ModalPost = {
+  id: string
+  content: string
+  image_url: string | null
+  created_at: string
+  likeCount: number
+  userLiked: boolean
 }
 
 type Toast = { id: number; message: string; type: 'success' | 'info' }
@@ -92,6 +112,31 @@ function ageInRange(age: number | null, range: string): boolean {
   return true
 }
 
+async function fetchCity(zip: string): Promise<string | null> {
+  try {
+    const res = await fetch(`https://api.zippopotam.us/us/${zip}`)
+    if (!res.ok) return null
+    const data = await res.json()
+    const place = data.places?.[0]
+    if (!place) return null
+    return `${place['place name']}, ${place['state abbreviation']}`
+  } catch {
+    return null
+  }
+}
+
+function formatTimeAgo(ts: string): string {
+  const diff = Date.now() - new Date(ts).getTime()
+  const mins = Math.floor(diff / 60_000)
+  const hours = Math.floor(diff / 3_600_000)
+  const days = Math.floor(diff / 86_400_000)
+  if (mins < 1) return 'just now'
+  if (mins < 60) return `${mins}m ago`
+  if (hours < 24) return `${hours}h ago`
+  if (days < 7) return `${days}d ago`
+  return new Date(ts).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+}
+
 // ── Shared input/select style tokens ─────────────────────────────────────────
 
 const FILTER_INPUT: React.CSSProperties = {
@@ -123,7 +168,7 @@ function ToastContainer({ toasts }: { toasts: Toast[] }) {
   if (!toasts.length) return null
   return (
     <div style={{
-      position: 'fixed', bottom: '24px', right: '24px', zIndex: 200,
+      position: 'fixed', bottom: '24px', right: '24px', zIndex: 300,
       display: 'flex', flexDirection: 'column', gap: '8px', maxWidth: '300px',
     }}>
       {toasts.map(t => (
@@ -174,22 +219,441 @@ function SkeletonCard() {
 
 // ── Avatar ────────────────────────────────────────────────────────────────────
 
-function Avatar({ url, first, last }: { url: string | null; first: string | null; last: string | null }) {
+function Avatar({ url, first, last, size = 56 }: {
+  url: string | null; first: string | null; last: string | null; size?: number
+}) {
   if (url) {
     return (
       <img
         src={url} alt={[first, last].filter(Boolean).join(' ')}
-        style={{ width: 56, height: 56, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }}
+        style={{ width: size, height: size, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }}
       />
     )
   }
   return (
     <div style={{
-      width: 56, height: 56, borderRadius: '50%', flexShrink: 0,
+      width: size, height: size, borderRadius: '50%', flexShrink: 0,
       background: '#c4822a', display: 'flex', alignItems: 'center', justifyContent: 'center',
-      fontFamily: "'Bebas Neue', sans-serif", fontSize: '20px', color: '#0d1f3c', letterSpacing: '0.05em',
+      fontFamily: "'Bebas Neue', sans-serif", fontSize: Math.round(size * 0.36), color: '#0d1f3c', letterSpacing: '0.05em',
     }}>
       {getInitials(first, last)}
+    </div>
+  )
+}
+
+// ── Modal post card ───────────────────────────────────────────────────────────
+
+function ModalPostCard({ post, currentUserId }: { post: ModalPost; currentUserId: string }) {
+  const [liked, setLiked] = useState(post.userLiked)
+  const [likeCount, setLikeCount] = useState(post.likeCount)
+
+  async function toggleLike() {
+    if (liked) {
+      setLiked(false); setLikeCount(c => c - 1)
+      await supabase.from('post_likes').delete().eq('post_id', post.id).eq('user_id', currentUserId)
+    } else {
+      setLiked(true); setLikeCount(c => c + 1)
+      await supabase.from('post_likes').insert({ post_id: post.id, user_id: currentUserId })
+    }
+  }
+
+  return (
+    <div style={{ border: '1px solid rgba(196,130,42,0.15)', borderRadius: '10px', overflow: 'hidden', background: 'rgba(255,255,255,0.04)' }}>
+      {post.content && (
+        <p style={{ margin: 0, padding: '14px 16px', fontSize: '14px', lineHeight: '1.6', color: '#f5edd6', fontFamily: "'Barlow', sans-serif", whiteSpace: 'pre-wrap' }}>
+          {post.content}
+        </p>
+      )}
+      {post.image_url && (
+        <img src={post.image_url} alt="Post" style={{ width: '100%', maxHeight: 280, objectFit: 'cover', display: 'block' }} />
+      )}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '8px 12px', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+        <span style={{ flex: 1, fontSize: '11px', color: 'rgba(245,237,214,0.3)', fontFamily: "'Barlow', sans-serif" }}>
+          {formatTimeAgo(post.created_at)}
+        </span>
+        <button
+          onClick={toggleLike}
+          style={{
+            display: 'flex', alignItems: 'center', gap: '5px',
+            background: 'none', border: 'none', cursor: 'pointer',
+            padding: '5px 9px', borderRadius: '6px',
+            color: liked ? '#c4822a' : 'rgba(245,237,214,0.45)',
+            fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 600, fontSize: '13px',
+            transition: 'color 0.12s',
+          }}
+        >
+          {liked ? '♥' : '♡'}{likeCount > 0 ? ` ${likeCount}` : ''}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ── Player modal ──────────────────────────────────────────────────────────────
+
+function PlayerModal({
+  player, currentUserId, distanceMi, onClose, onToast,
+}: {
+  player: Profile
+  currentUserId: string
+  distanceMi: number | null
+  onClose: () => void
+  onToast: (msg: string, type?: 'success' | 'info') => void
+}) {
+  const [visible, setVisible] = useState(false)
+  const [cityName, setCityName] = useState<string | null>(null)
+  const [history, setHistory] = useState<PlayingHistory[]>([])
+  const [posts, setPosts] = useState<ModalPost[]>([])
+  const [totalPosts, setTotalPosts] = useState(0)
+  const [loading, setLoading] = useState(true)
+  const [existingRequest, setExistingRequest] = useState<'pending' | 'accepted' | null>(null)
+  const [requesting, setRequesting] = useState(false)
+  const panelRef = useRef<HTMLDivElement>(null)
+
+  const fullName = [player.first_name, player.last_name].filter(Boolean).join(' ') || 'Unknown Player'
+  const isVerified = (player.vouches ?? 0) >= 3
+
+  // Fade-in + body scroll lock
+  useEffect(() => {
+    requestAnimationFrame(() => setVisible(true))
+    document.body.style.overflow = 'hidden'
+    return () => { document.body.style.overflow = '' }
+  }, [])
+
+  // Escape key to close
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') onClose() }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [onClose])
+
+  // Fetch all modal data
+  useEffect(() => {
+    async function fetchData() {
+      // City name
+      if (player.zip_code) fetchCity(player.zip_code).then(c => setCityName(c))
+
+      // Playing history
+      const { data: histData } = await supabase
+        .from('playing_history').select('*')
+        .eq('user_id', player.id).order('year_start', { ascending: false })
+      setHistory((histData ?? []) as PlayingHistory[])
+
+      // Posts (limit 5) + total count in parallel
+      const [postsRes, countRes] = await Promise.all([
+        supabase.from('posts')
+          .select('id, content, image_url, created_at')
+          .eq('user_id', player.id)
+          .order('created_at', { ascending: false })
+          .limit(5),
+        supabase.from('posts')
+          .select('*', { count: 'exact', head: true })
+          .eq('user_id', player.id),
+      ])
+
+      setTotalPosts(countRes.count ?? 0)
+
+      const rawPosts = (postsRes.data ?? []) as { id: string; content: string; image_url: string | null; created_at: string }[]
+
+      if (rawPosts.length > 0) {
+        const postIds = rawPosts.map(p => p.id)
+        const { data: likesData } = await supabase
+          .from('post_likes').select('post_id, user_id').in('post_id', postIds)
+
+        const likeCountMap: Record<string, number> = {}
+        const userLikedSet = new Set<string>()
+        for (const like of likesData ?? []) {
+          likeCountMap[like.post_id] = (likeCountMap[like.post_id] ?? 0) + 1
+          if (like.user_id === currentUserId) userLikedSet.add(like.post_id)
+        }
+
+        setPosts(rawPosts.map(p => ({
+          id: p.id, content: p.content, image_url: p.image_url,
+          created_at: p.created_at,
+          likeCount: likeCountMap[p.id] ?? 0,
+          userLiked: userLikedSet.has(p.id),
+        })))
+      }
+
+      // Existing catch request
+      const { data: existing } = await supabase
+        .from('catch_requests').select('status')
+        .or(
+          `and(sender_id.eq.${currentUserId},receiver_id.eq.${player.id}),` +
+          `and(sender_id.eq.${player.id},receiver_id.eq.${currentUserId})`
+        )
+        .in('status', ['pending', 'accepted'])
+        .limit(1)
+
+      if (existing && existing.length > 0) {
+        setExistingRequest(existing[0].status as 'pending' | 'accepted')
+      }
+
+      setLoading(false)
+    }
+    fetchData()
+  }, [player.id, currentUserId, player.zip_code])
+
+  async function handlePlayCatch() {
+    setRequesting(true)
+    const { error } = await supabase.from('catch_requests').insert({
+      sender_id: currentUserId, receiver_id: player.id, status: 'pending',
+    })
+    if (error) {
+      onToast('Something went wrong. Try again.', 'info')
+    } else {
+      setExistingRequest('pending')
+      onToast(`Catch request sent to ${player.first_name || 'player'}!`)
+    }
+    setRequesting(false)
+  }
+
+  const isPending  = existingRequest === 'pending'
+  const isAccepted = existingRequest === 'accepted'
+
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: 'fixed', inset: 0, zIndex: 200,
+        background: 'rgba(0,0,0,0.8)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        padding: '20px 16px',
+        opacity: visible ? 1 : 0,
+        transition: 'opacity 0.2s ease',
+      }}
+    >
+      {/* Modal panel */}
+      <div
+        ref={panelRef}
+        onClick={e => e.stopPropagation()}
+        style={{
+          position: 'relative',
+          width: '100%', maxWidth: '600px', maxHeight: '90vh',
+          background: '#162840', border: '1px solid rgba(196,130,42,0.3)',
+          borderRadius: '14px', display: 'flex', flexDirection: 'column',
+          transform: visible ? 'translateY(0)' : 'translateY(16px)',
+          transition: 'transform 0.22s ease',
+          boxShadow: '0 24px 64px rgba(0,0,0,0.7)',
+        }}
+      >
+        {/* Close button */}
+        <button
+          onClick={onClose}
+          aria-label="Close"
+          style={{
+            position: 'absolute', top: '14px', right: '14px', zIndex: 10,
+            width: 32, height: 32, borderRadius: '50%',
+            background: 'rgba(255,255,255,0.08)', border: 'none', cursor: 'pointer',
+            color: 'rgba(245,237,214,0.6)', fontSize: '18px', lineHeight: 1,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            transition: 'background 0.15s, color 0.15s',
+          }}
+          onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.16)'; e.currentTarget.style.color = '#f5edd6' }}
+          onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.08)'; e.currentTarget.style.color = 'rgba(245,237,214,0.6)' }}
+        >
+          ×
+        </button>
+
+        {/* Scrollable content */}
+        <div style={{ overflowY: 'auto', flex: 1, padding: '28px 28px 0' }}>
+
+          {/* ── Profile header ── */}
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', marginBottom: '24px', paddingRight: '24px' /* avoid overlap with close btn */ }}>
+            <Avatar url={player.avatar_url} first={player.first_name} last={player.last_name} size={100} />
+
+            <div style={{ marginTop: '14px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                <h2 style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: '34px', letterSpacing: '0.05em', margin: 0, lineHeight: 1, color: '#f5edd6' }}>
+                  {fullName}
+                </h2>
+                {isVerified && (
+                  <span style={{
+                    fontSize: '10px', fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700,
+                    letterSpacing: '0.06em', color: '#f0b429',
+                    background: 'rgba(240,180,41,0.1)', border: '1px solid rgba(240,180,41,0.3)',
+                    borderRadius: '4px', padding: '2px 6px',
+                  }}>
+                    ★ Verified
+                  </span>
+                )}
+              </div>
+
+              {(player.highest_level || player.status) && (
+                <p style={{ margin: '6px 0 0', fontSize: '14px', color: 'rgba(245,237,214,0.55)', fontFamily: "'Barlow', sans-serif" }}>
+                  {[player.highest_level, player.status].filter(Boolean).join(' · ')}
+                </p>
+              )}
+
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', marginTop: '6px', flexWrap: 'wrap' }}>
+                {cityName && (
+                  <span style={{ fontSize: '13px', color: 'rgba(245,237,214,0.45)', fontFamily: "'Barlow', sans-serif" }}>
+                    📍 {cityName}
+                  </span>
+                )}
+                {distanceMi !== null && (
+                  <>
+                    {cityName && <span style={{ fontSize: '13px', color: 'rgba(245,237,214,0.25)' }}>·</span>}
+                    <span style={{ fontSize: '13px', color: 'rgba(245,237,214,0.45)', fontFamily: "'Barlow', sans-serif" }}>
+                      {distanceMi.toFixed(1)} mi away
+                    </span>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Position pills */}
+          {player.positions && player.positions.length > 0 && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', justifyContent: 'center', marginBottom: '18px' }}>
+              {player.positions.map(pos => (
+                <span key={pos} style={{
+                  padding: '4px 13px', borderRadius: '99px', fontSize: '12px',
+                  fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, letterSpacing: '0.08em',
+                  border: '1px solid rgba(196,130,42,0.45)', color: '#c4822a',
+                  background: 'rgba(196,130,42,0.1)',
+                }}>
+                  {pos}
+                </span>
+              ))}
+            </div>
+          )}
+
+          {/* Bio */}
+          {player.bio && (
+            <p style={{ fontSize: '14px', lineHeight: '1.65', color: 'rgba(245,237,214,0.7)', fontFamily: "'Barlow', sans-serif", margin: '0 0 24px', textAlign: 'center' }}>
+              {player.bio}
+            </p>
+          )}
+
+          {/* Divider */}
+          <div style={{ height: '1px', background: 'rgba(196,130,42,0.15)', marginBottom: '24px' }} />
+
+          {loading ? (
+            <div style={{ display: 'flex', justifyContent: 'center', padding: '32px 0' }}>
+              <div style={{ width: 28, height: 28, borderRadius: '50%', border: '3px solid rgba(196,130,42,0.2)', borderTopColor: '#c4822a', animation: 'spin 0.7s linear infinite' }} />
+            </div>
+          ) : (
+            <>
+              {/* ── Where They've Played ── */}
+              {history.length > 0 && (
+                <div style={{ marginBottom: '28px' }}>
+                  <h3 style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: '20px', letterSpacing: '0.05em', margin: '0 0 12px', color: '#f5edd6' }}>
+                    Where They've <span style={{ color: '#c4822a' }}>Played</span>
+                  </h3>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {history.map(entry => (
+                      <div key={entry.id} style={{ padding: '11px 14px', background: 'rgba(255,255,255,0.04)', borderRadius: '8px', border: '1px solid rgba(245,237,214,0.07)' }}>
+                        <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: '14px', color: '#f5edd6' }}>
+                          {entry.team_name}
+                        </div>
+                        <div style={{ fontSize: '12px', color: 'rgba(245,237,214,0.5)', fontFamily: "'Barlow', sans-serif", marginTop: '2px' }}>
+                          {[entry.position, entry.level].filter(Boolean).join(' · ')}
+                          {entry.year_start && (
+                            <span> · {entry.year_start}{entry.is_current ? '–Present' : entry.year_end ? `–${entry.year_end}` : ''}</span>
+                          )}
+                        </div>
+                        {entry.notes && (
+                          <p style={{ margin: '4px 0 0', fontSize: '12px', color: 'rgba(245,237,214,0.35)', fontFamily: "'Barlow', sans-serif" }}>
+                            {entry.notes}
+                          </p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* ── Posts ── */}
+              {posts.length > 0 && (
+                <div style={{ marginBottom: '0' }}>
+                  <h3 style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: '20px', letterSpacing: '0.05em', margin: '0 0 12px', color: '#f5edd6' }}>
+                    Posts
+                  </h3>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    {posts.map(post => (
+                      <ModalPostCard key={post.id} post={post} currentUserId={currentUserId} />
+                    ))}
+                  </div>
+                  {totalPosts > 5 && (
+                    <p style={{ marginTop: '10px', fontSize: '12px', color: 'rgba(245,237,214,0.35)', fontFamily: "'Barlow', sans-serif", textAlign: 'center' }}>
+                      Showing 5 of {totalPosts} posts
+                    </p>
+                  )}
+                </div>
+              )}
+            </>
+          )}
+
+          {/* Spacer so content doesn't hide behind sticky buttons */}
+          <div style={{ height: '140px' }} />
+        </div>
+
+        {/* ── Sticky action buttons ── */}
+        <div style={{
+          position: 'absolute', bottom: 0, left: 0, right: 0,
+          padding: '16px 28px 24px',
+          background: 'linear-gradient(to bottom, transparent 0%, #162840 30%)',
+          borderRadius: '0 0 14px 14px',
+          pointerEvents: 'none',
+        }}>
+          <div style={{ pointerEvents: 'all', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            {/* Play Catch / Pending / Connected */}
+            {isAccepted ? (
+              <button disabled style={{
+                width: '100%', padding: '13px', borderRadius: '9px', border: 'none',
+                background: 'rgba(72,187,120,0.2)', color: '#48bb78',
+                fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700,
+                letterSpacing: '0.1em', textTransform: 'uppercase', fontSize: '14px',
+                cursor: 'default',
+              }}>
+                ✓ Connected
+              </button>
+            ) : isPending ? (
+              <button disabled style={{
+                width: '100%', padding: '13px', borderRadius: '9px', border: 'none',
+                background: 'rgba(196,130,42,0.25)', color: 'rgba(245,237,214,0.4)',
+                fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700,
+                letterSpacing: '0.1em', textTransform: 'uppercase', fontSize: '14px',
+                cursor: 'not-allowed',
+              }}>
+                Request Pending
+              </button>
+            ) : (
+              <button
+                onClick={handlePlayCatch}
+                disabled={requesting}
+                style={{
+                  width: '100%', padding: '13px', borderRadius: '9px', border: 'none',
+                  background: requesting ? 'rgba(196,130,42,0.5)' : '#c4822a',
+                  color: '#0d1f3c', fontFamily: "'Barlow Condensed', sans-serif",
+                  fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase',
+                  fontSize: '14px', cursor: requesting ? 'not-allowed' : 'pointer',
+                  transition: 'background 0.15s',
+                }}
+              >
+                {requesting ? '…' : '⚾ Play Catch'}
+              </button>
+            )}
+
+            {/* Vouch */}
+            <button
+              onClick={() => onToast('Vouch feature coming soon!', 'info')}
+              style={{
+                width: '100%', padding: '11px', borderRadius: '9px',
+                background: 'transparent', border: '1px solid rgba(245,237,214,0.18)',
+                color: 'rgba(245,237,214,0.6)', fontFamily: "'Barlow Condensed', sans-serif",
+                fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase',
+                fontSize: '13px', cursor: 'pointer', transition: 'all 0.15s',
+              }}
+              onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(196,130,42,0.4)'; e.currentTarget.style.color = '#c4822a' }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(245,237,214,0.18)'; e.currentTarget.style.color = 'rgba(245,237,214,0.6)' }}
+            >
+              Vouch
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   )
 }
@@ -197,13 +661,14 @@ function Avatar({ url, first, last }: { url: string | null; first: string | null
 // ── Player card ───────────────────────────────────────────────────────────────
 
 function PlayerCard({
-  player, currentUserId, userZip, distanceMi, onToast,
+  player, currentUserId, userZip, distanceMi, onToast, onOpenModal,
 }: {
   player: Profile
   currentUserId: string
   userZip: string
   distanceMi: number | null
   onToast: (msg: string, type?: 'success' | 'info') => void
+  onOpenModal: () => void
 }) {
   const [requesting, setRequesting] = useState(false)
   const age = calculateAge(player.date_of_birth)
@@ -214,7 +679,8 @@ function PlayerCard({
     : player.zip_code ? `📍 ${player.zip_code}` : null
   const meta = [age ? `${age} yrs` : null, locationLabel].filter(Boolean).join(' · ')
 
-  async function handlePlayCatch() {
+  async function handlePlayCatch(e: React.MouseEvent) {
+    e.stopPropagation()
     setRequesting(true)
     try {
       const { data: existing, error: checkError } = await supabase
@@ -227,24 +693,17 @@ function PlayerCard({
         .in('status', ['pending', 'accepted'])
 
       if (checkError) {
-        console.error('[PlayCatch] existing-check error:', checkError)
         onToast('Something went wrong. Try again.', 'info')
         return
       }
-
       if (existing && existing.length > 0) {
         onToast(`You already have an active request with ${player.first_name || 'this player'}!`, 'info')
         return
       }
-
       const { error } = await supabase.from('catch_requests').insert({
-        sender_id: currentUserId,
-        receiver_id: player.id,
-        status: 'pending',
+        sender_id: currentUserId, receiver_id: player.id, status: 'pending',
       })
-
       if (error) {
-        console.error('[PlayCatch] insert error:', error)
         onToast('Something went wrong. Try again.', 'info')
       } else {
         onToast(`Catch request sent to ${player.first_name || 'player'}!`)
@@ -255,20 +714,23 @@ function PlayerCard({
   }
 
   return (
-    <div style={{
-      background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(196,130,42,0.2)',
-      borderRadius: '12px', padding: '20px',
-      display: 'flex', flexDirection: 'column', gap: '10px',
-    }}>
+    <div
+      onClick={onOpenModal}
+      style={{
+        background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(196,130,42,0.2)',
+        borderRadius: '12px', padding: '20px',
+        display: 'flex', flexDirection: 'column', gap: '10px',
+        cursor: 'pointer', transition: 'border-color 0.15s, background 0.15s',
+      }}
+      onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.borderColor = 'rgba(196,130,42,0.45)'; (e.currentTarget as HTMLDivElement).style.background = 'rgba(255,255,255,0.06)' }}
+      onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.borderColor = 'rgba(196,130,42,0.2)'; (e.currentTarget as HTMLDivElement).style.background = 'rgba(255,255,255,0.04)' }}
+    >
       {/* Header: avatar + name + verified badge */}
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
         <Avatar url={player.avatar_url} first={player.first_name} last={player.last_name} />
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '6px' }}>
-            <span style={{
-              fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700,
-              fontSize: '16px', color: '#f5edd6', lineHeight: 1.2,
-            }}>
+            <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: '16px', color: '#f5edd6', lineHeight: 1.2 }}>
               {fullName}
             </span>
             {isVerified && (
@@ -342,7 +804,7 @@ function PlayerCard({
           {requesting ? '…' : 'Play Catch'}
         </button>
         <button
-          onClick={() => onToast('Vouch feature coming soon!', 'info')}
+          onClick={e => { e.stopPropagation(); onToast('Vouch feature coming soon!', 'info') }}
           style={{
             flex: 1, padding: '9px 8px', borderRadius: '8px',
             cursor: 'pointer', background: 'transparent',
@@ -385,6 +847,7 @@ export default function PlayersPage() {
   const [distanceFilter, setDistanceFilter] = useState('everywhere')
 
   const [toasts, setToasts] = useState<Toast[]>([])
+  const [modalPlayer, setModalPlayer] = useState<Profile | null>(null)
 
   function showToast(message: string, type: 'success' | 'info' = 'success') {
     const id = Date.now()
@@ -410,16 +873,10 @@ export default function PlayersPage() {
   useEffect(() => {
     async function init() {
       const { data: { session } } = await supabase.auth.getSession()
-      if (!session) {
-        router.push('/auth?tab=login')
-        return
-      }
+      if (!session) { router.push('/auth?tab=login'); return }
 
       const { data: profile } = await supabase
-        .from('profiles')
-        .select('first_name, zip_code')
-        .eq('id', session.user.id)
-        .single()
+        .from('profiles').select('first_name, zip_code').eq('id', session.user.id).single()
 
       if (profile) {
         setUserName(profile.first_name ?? null)
@@ -431,7 +888,7 @@ export default function PlayersPage() {
       }
 
       setSessionLoading(false)
-      setUserId(session.user.id) // set last — fetchPlayers fires after profile is ready
+      setUserId(session.user.id)
     }
 
     init()
@@ -454,16 +911,12 @@ export default function PlayersPage() {
       const playerList: Profile[] = (data ?? []) as Profile[]
 
       if (playerList.length === 0) {
-        setPlayers([])
-        setPlayersLoading(false)
-        setZipCoordsReady(true)
-        return
+        setPlayers([]); setPlayersLoading(false); setZipCoordsReady(true); return
       }
 
       setPlayers(playerList)
       setPlayersLoading(false)
-
-      prefetchAllZips(playerList, userZip) // non-blocking — sets zipCoordsReady when done
+      prefetchAllZips(playerList, userZip)
     }
     fetchPlayers()
   }, [userId, prefetchAllZips, userZip])
@@ -494,7 +947,6 @@ export default function PlayersPage() {
           const c = zipCache[p.zip_code]
           if (c === undefined || c === null) return true
           const d = getDistance(userCoords.lat, userCoords.lon, c.lat, c.lon)
-          console.log('[Players] player', p.id, '| zip:', p.zip_code, '| distance:', d.toFixed(1), 'mi | limit: 10 mi | pass:', d <= 10)
           return d <= 10
         })
       } else {
@@ -504,7 +956,6 @@ export default function PlayersPage() {
           const c = zipCache[p.zip_code]
           if (c === undefined || c === null) return true
           const d = getDistance(userCoords.lat, userCoords.lon, c.lat, c.lon)
-          console.log('[Players] player', p.id, '| zip:', p.zip_code, '| distance:', d.toFixed(1), 'mi | limit:', maxMi, 'mi | pass:', d <= maxMi)
           return d <= maxMi
         })
       }
@@ -535,6 +986,14 @@ export default function PlayersPage() {
     )
   }
 
+  // ── Compute modal player distance ─────────────────────────────────────────
+  const modalDistanceMi = modalPlayer && userCoords && modalPlayer.zip_code
+    ? (() => {
+        const c = zipCache[modalPlayer.zip_code!]
+        return c ? getDistance(userCoords.lat, userCoords.lon, c.lat, c.lon) : null
+      })()
+    : null
+
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <AuthenticatedLayout>
@@ -546,11 +1005,7 @@ export default function PlayersPage() {
 
         {/* Page header */}
         <div style={{ marginBottom: '24px' }}>
-          <h1 style={{
-            fontFamily: "'Bebas Neue', sans-serif",
-            fontSize: 'clamp(36px, 6vw, 56px)',
-            letterSpacing: '0.05em', margin: 0, lineHeight: 1,
-          }}>
+          <h1 style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 'clamp(36px, 6vw, 56px)', letterSpacing: '0.05em', margin: 0, lineHeight: 1 }}>
             Find <span style={{ color: '#c4822a' }}>Players</span>
           </h1>
           <p style={{ marginTop: '6px', fontSize: '15px', color: 'rgba(245,237,214,0.5)' }}>
@@ -564,17 +1019,11 @@ export default function PlayersPage() {
           padding: '14px 16px', borderRadius: '12px',
           background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(196,130,42,0.15)',
         }}>
-          {/* Search — grows to fill remaining space */}
           <div style={{ flex: '1 1 160px' }}>
-            <input
-              type="text" value={search} onChange={e => setSearch(e.target.value)}
-              placeholder="Search by name or position..."
-              style={FILTER_INPUT}
-              onFocus={onFocusBorder} onBlur={onBlurBorder}
-            />
+            <input type="text" value={search} onChange={e => setSearch(e.target.value)}
+              placeholder="Search by name or position..." style={FILTER_INPUT}
+              onFocus={onFocusBorder} onBlur={onBlurBorder} />
           </div>
-
-          {/* Level */}
           <div style={{ flex: '1 1 150px' }}>
             <select value={levelFilter} onChange={e => setLevelFilter(e.target.value)}
               style={{ ...FILTER_SELECT, width: '100%' }} onFocus={onFocusBorder} onBlur={onBlurBorder}>
@@ -582,8 +1031,6 @@ export default function PlayersPage() {
               {LEVELS.map(l => <option key={l} value={l} style={{ background: '#0d1f3c' }}>{l}</option>)}
             </select>
           </div>
-
-          {/* Status */}
           <div style={{ flex: '0 1 130px' }}>
             <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}
               style={{ ...FILTER_SELECT, width: '100%' }} onFocus={onFocusBorder} onBlur={onBlurBorder}>
@@ -592,8 +1039,6 @@ export default function PlayersPage() {
               <option value="Washed Up" style={{ background: '#0d1f3c' }}>Washed Up</option>
             </select>
           </div>
-
-          {/* Position */}
           <div style={{ flex: '0 1 130px' }}>
             <select value={positionFilter} onChange={e => setPositionFilter(e.target.value)}
               style={{ ...FILTER_SELECT, width: '100%' }} onFocus={onFocusBorder} onBlur={onBlurBorder}>
@@ -601,8 +1046,6 @@ export default function PlayersPage() {
               {POSITIONS.map(p => <option key={p} value={p} style={{ background: '#0d1f3c' }}>{p}</option>)}
             </select>
           </div>
-
-          {/* Age range */}
           <div style={{ flex: '0 1 110px' }}>
             <select value={ageFilter} onChange={e => setAgeFilter(e.target.value)}
               style={{ ...FILTER_SELECT, width: '100%' }} onFocus={onFocusBorder} onBlur={onBlurBorder}>
@@ -612,8 +1055,6 @@ export default function PlayersPage() {
               )}
             </select>
           </div>
-
-          {/* Distance */}
           <div style={{ flex: '0 1 140px' }}>
             <select value={distanceFilter} onChange={e => setDistanceFilter(e.target.value)}
               style={{ ...FILTER_SELECT, width: '100%' }} onFocus={onFocusBorder} onBlur={onBlurBorder}>
@@ -648,23 +1089,15 @@ export default function PlayersPage() {
         ) : players.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '80px 20px' }}>
             <div style={{ fontSize: '52px', marginBottom: '16px' }}>⚾</div>
-            <h2 style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: '32px', letterSpacing: '0.05em', color: '#f5edd6', margin: '0 0 8px' }}>
-              No Players Yet
-            </h2>
-            <p style={{ color: 'rgba(245,237,214,0.5)', fontSize: '15px', margin: 0 }}>
-              Be the first player in your area!
-            </p>
+            <h2 style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: '32px', letterSpacing: '0.05em', color: '#f5edd6', margin: '0 0 8px' }}>No Players Yet</h2>
+            <p style={{ color: 'rgba(245,237,214,0.5)', fontSize: '15px', margin: 0 }}>Be the first player in your area!</p>
           </div>
 
         ) : filtered.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '80px 20px' }}>
             <div style={{ fontSize: '52px', marginBottom: '16px' }}>🔍</div>
-            <h2 style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: '32px', letterSpacing: '0.05em', color: '#f5edd6', margin: '0 0 8px' }}>
-              No Matches
-            </h2>
-            <p style={{ color: 'rgba(245,237,214,0.5)', fontSize: '15px', margin: 0 }}>
-              No players found matching your filters.
-            </p>
+            <h2 style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: '32px', letterSpacing: '0.05em', color: '#f5edd6', margin: '0 0 8px' }}>No Matches</h2>
+            <p style={{ color: 'rgba(245,237,214,0.5)', fontSize: '15px', margin: 0 }}>No players found matching your filters.</p>
           </div>
 
         ) : (
@@ -682,6 +1115,7 @@ export default function PlayersPage() {
                   userZip={userZip}
                   distanceMi={distanceMi}
                   onToast={showToast}
+                  onOpenModal={() => setModalPlayer(player)}
                 />
               )
             })}
@@ -692,6 +1126,18 @@ export default function PlayersPage() {
 
       <ToastContainer toasts={toasts} />
     </div>
+
+    {/* Player modal */}
+    {modalPlayer && (
+      <PlayerModal
+        player={modalPlayer}
+        currentUserId={userId!}
+        distanceMi={modalDistanceMi}
+        onClose={() => setModalPlayer(null)}
+        onToast={showToast}
+      />
+    )}
+
     </AuthenticatedLayout>
   )
 }
