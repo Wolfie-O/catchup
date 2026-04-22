@@ -233,11 +233,14 @@ export default function MessagingPanel() {
   // ── Fetch partner requests ─────────────────────────────────────────────────
 
   const fetchPartnerRequests = useCallback(async (uid: string) => {
-    const { data: followsData } = await supabase
+    console.log('[MessagingPanel] fetching partner requests for:', uid)
+    const { data: followsData, error: followsError } = await supabase
       .from('follows')
       .select('id, follower_id')
       .eq('following_id', uid)
       .eq('status', 'pending')
+
+    console.log('[MessagingPanel] partner requests result:', followsData, followsError)
 
     const rows = (followsData ?? []) as { id: string; follower_id: string }[]
     if (rows.length === 0) { setPartnerRequests([]); return }
@@ -262,6 +265,7 @@ export default function MessagingPanel() {
 
   useEffect(() => {
     if (userId) {
+      console.log('[MessagingPanel] userId ready, calling fetch functions with:', userId)
       fetchConversations(userId)
       fetchPartnerRequests(userId)
     }
@@ -443,6 +447,7 @@ export default function MessagingPanel() {
     setOpen(o => {
       const next = !o
       if (next && userId) {
+        console.log('[MessagingPanel] panel opened, calling fetch functions with:', userId)
         fetchConversations(userId)
         fetchPartnerRequests(userId)
       }
