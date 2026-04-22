@@ -47,17 +47,12 @@ type PlayingHistory = {
   notes: string | null
 }
 
-type OtherPlayer = {
+type FollowPerson = {
   id: string
   first_name: string | null
   last_name: string | null
   avatar_url: string | null
   highest_level: string | null
-}
-
-type Connection = {
-  request_id: string
-  other: OtherPlayer
 }
 
 type Post = {
@@ -167,6 +162,49 @@ function Avatar({ url, first, last, size = 120 }: {
   )
 }
 
+// ── Follow person row (shared by Following + Followers sections) ───────────────
+
+function FollowRow({ person }: { person: FollowPerson }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 12px', background: 'rgba(255,255,255,0.03)', borderRadius: '8px', border: '1px solid rgba(245,237,214,0.06)' }}>
+      {person.avatar_url ? (
+        <img src={person.avatar_url} alt="" style={{ width: 38, height: 38, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
+      ) : (
+        <div style={{ width: 38, height: 38, borderRadius: '50%', background: '#c4822a', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Bebas Neue', sans-serif", fontSize: 14, color: '#0d1f3c' }}>
+          {getInitials(person.first_name, person.last_name)}
+        </div>
+      )}
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: '14px', color: '#f5edd6', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
+          {[person.first_name, person.last_name].filter(Boolean).join(' ') || 'Player'}
+        </div>
+        {person.highest_level && (
+          <div style={{ fontSize: '11px', color: 'rgba(245,237,214,0.4)', fontFamily: "'Barlow', sans-serif" }}>
+            {person.highest_level}
+          </div>
+        )}
+      </div>
+      <button
+        onClick={() => {
+          const btn = document.querySelector('button[aria-label="Open messages"]') as HTMLButtonElement | null
+          btn?.click()
+        }}
+        style={{
+          padding: '5px 12px', borderRadius: '6px', border: '1px solid rgba(196,130,42,0.35)',
+          background: 'transparent', color: '#c4822a',
+          fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700,
+          fontSize: '11px', letterSpacing: '0.05em', cursor: 'pointer',
+          flexShrink: 0, transition: 'background 0.15s',
+        }}
+        onMouseEnter={e => { e.currentTarget.style.background = 'rgba(196,130,42,0.1)' }}
+        onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
+      >
+        Message
+      </button>
+    </div>
+  )
+}
+
 // ── Page ───────────────────────────────────────────────────────────────────────
 
 export default function ProfilePage() {
@@ -209,8 +247,13 @@ export default function ProfilePage() {
   const [hNotes, setHNotes] = useState('')
   const [hSaving, setHSaving] = useState(false)
 
-  // ── Connections ─────────────────────────────────────────────────────────────
-  const [connections, setConnections] = useState<Connection[]>([])
+  // ── Follows ─────────────────────────────────────────────────────────────────
+  const [followingList, setFollowingList] = useState<FollowPerson[]>([])
+  const [followersList, setFollowersList] = useState<FollowPerson[]>([])
+  const [followerCount, setFollowerCount] = useState(0)
+  const [followingCount, setFollowingCount] = useState(0)
+  const [showFollowersExpand, setShowFollowersExpand] = useState(false)
+  const [showFollowingExpand, setShowFollowingExpand] = useState(false)
 
   // ── Posts ───────────────────────────────────────────────────────────────────
   const [posts, setPosts] = useState<Post[]>([])
@@ -269,40 +312,45 @@ export default function ProfilePage() {
       .then(({ data }) => setHistory((data ?? []) as PlayingHistory[]))
   }, [userId])
 
-  // ── Fetch connections ─────────────────────────────────────────────────────────
+  // ── Fetch follows (following + followers) ─────────────────────────────────────
   useEffect(() => {
     if (!userId) return
-    async function fetchConnections() {
-      const { data: requests } = await supabase
-        .from('catch_requests')
-        .select('id, sender_id, receiver_id')
-        .eq('status', 'accepted')
-        .or(`sender_id.eq.${userId},receiver_id.eq.${userId}`)
+    async function fetchFollows() {
+      // People this user follows
+      const { data: followingData } = await supabase
+        .from('follows')
+        .select('following_id')
+        .eq('follower_id', userId)
 
-      if (!requests || requests.length === 0) return
+      const followingIds = (followingData ?? []).map((f: { following_id: string }) => f.following_id)
+      setFollowingCount(followingIds.length)
 
-      const otherIds = requests.map((r: { sender_id: string; receiver_id: string }) =>
-        r.sender_id === userId ? r.receiver_id : r.sender_id
-      )
+      if (followingIds.length > 0) {
+        const { data: followingProfiles } = await supabase
+          .from('profiles')
+          .select('id, first_name, last_name, avatar_url, highest_level')
+          .in('id', followingIds)
+        setFollowingList((followingProfiles ?? []) as FollowPerson[])
+      }
 
-      const { data: profiles } = await supabase
-        .from('profiles')
-        .select('id, first_name, last_name, avatar_url, highest_level')
-        .in('id', otherIds)
+      // People who follow this user
+      const { data: followerData } = await supabase
+        .from('follows')
+        .select('follower_id')
+        .eq('following_id', userId)
 
-      const profileMap: Record<string, OtherPlayer> = {}
-      for (const p of (profiles ?? []) as OtherPlayer[]) profileMap[p.id] = p
+      const followerIds = (followerData ?? []).map((f: { follower_id: string }) => f.follower_id)
+      setFollowerCount(followerIds.length)
 
-      const conns: Connection[] = requests.map((r: { id: string; sender_id: string; receiver_id: string }) => {
-        const otherId = r.sender_id === userId ? r.receiver_id : r.sender_id
-        return {
-          request_id: r.id,
-          other: profileMap[otherId] ?? { id: otherId, first_name: null, last_name: null, avatar_url: null, highest_level: null },
-        }
-      })
-      setConnections(conns)
+      if (followerIds.length > 0) {
+        const { data: followerProfiles } = await supabase
+          .from('profiles')
+          .select('id, first_name, last_name, avatar_url, highest_level')
+          .in('id', followerIds)
+        setFollowersList((followerProfiles ?? []) as FollowPerson[])
+      }
     }
-    fetchConnections()
+    fetchFollows()
   }, [userId])
 
   // ── Fetch own posts ───────────────────────────────────────────────────────────
@@ -656,8 +704,89 @@ export default function ProfilePage() {
                           )}
                         </div>
 
+                        {/* Follower / Following counts */}
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0', marginTop: '10px' }}>
+                          <button
+                            onClick={() => { setShowFollowersExpand(v => !v); setShowFollowingExpand(false) }}
+                            style={{
+                              background: 'none', border: 'none', cursor: 'pointer', padding: '4px 10px',
+                              fontFamily: "'Barlow Condensed', sans-serif", fontSize: '13px', letterSpacing: '0.04em',
+                              color: showFollowersExpand ? '#c4822a' : 'rgba(245,237,214,0.55)',
+                              transition: 'color 0.15s',
+                            }}
+                          >
+                            <strong style={{ fontWeight: 700, color: showFollowersExpand ? '#c4822a' : '#f5edd6' }}>{followerCount}</strong>{' '}
+                            Follower{followerCount !== 1 ? 's' : ''}
+                          </button>
+                          <span style={{ color: 'rgba(245,237,214,0.2)', fontSize: '14px', userSelect: 'none' }}>|</span>
+                          <button
+                            onClick={() => { setShowFollowingExpand(v => !v); setShowFollowersExpand(false) }}
+                            style={{
+                              background: 'none', border: 'none', cursor: 'pointer', padding: '4px 10px',
+                              fontFamily: "'Barlow Condensed', sans-serif", fontSize: '13px', letterSpacing: '0.04em',
+                              color: showFollowingExpand ? '#c4822a' : 'rgba(245,237,214,0.55)',
+                              transition: 'color 0.15s',
+                            }}
+                          >
+                            <strong style={{ fontWeight: 700, color: showFollowingExpand ? '#c4822a' : '#f5edd6' }}>{followingCount}</strong>{' '}
+                            Following
+                          </button>
+                        </div>
+
+                        {/* Inline follower expand */}
+                        {showFollowersExpand && (
+                          <div style={{ marginTop: '10px', textAlign: 'left', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(196,130,42,0.2)', borderRadius: '10px', padding: '10px', maxHeight: '200px', overflowY: 'auto' }}>
+                            {followersList.length === 0 ? (
+                              <p style={{ margin: 0, fontSize: '12px', color: 'rgba(245,237,214,0.35)', fontFamily: "'Barlow', sans-serif", textAlign: 'center', padding: '8px 0' }}>
+                                No followers yet
+                              </p>
+                            ) : (
+                              followersList.map(person => (
+                                <div key={person.id} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 4px' }}>
+                                  {person.avatar_url ? (
+                                    <img src={person.avatar_url} alt="" style={{ width: 28, height: 28, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
+                                  ) : (
+                                    <div style={{ width: 28, height: 28, borderRadius: '50%', background: '#c4822a', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Bebas Neue', sans-serif", fontSize: 11, color: '#0d1f3c' }}>
+                                      {getInitials(person.first_name, person.last_name)}
+                                    </div>
+                                  )}
+                                  <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: '13px', color: '#f5edd6' }}>
+                                    {[person.first_name, person.last_name].filter(Boolean).join(' ') || 'Player'}
+                                  </span>
+                                </div>
+                              ))
+                            )}
+                          </div>
+                        )}
+
+                        {/* Inline following expand */}
+                        {showFollowingExpand && (
+                          <div style={{ marginTop: '10px', textAlign: 'left', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(196,130,42,0.2)', borderRadius: '10px', padding: '10px', maxHeight: '200px', overflowY: 'auto' }}>
+                            {followingList.length === 0 ? (
+                              <p style={{ margin: 0, fontSize: '12px', color: 'rgba(245,237,214,0.35)', fontFamily: "'Barlow', sans-serif", textAlign: 'center', padding: '8px 0' }}>
+                                Not following anyone yet
+                              </p>
+                            ) : (
+                              followingList.map(person => (
+                                <div key={person.id} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 4px' }}>
+                                  {person.avatar_url ? (
+                                    <img src={person.avatar_url} alt="" style={{ width: 28, height: 28, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
+                                  ) : (
+                                    <div style={{ width: 28, height: 28, borderRadius: '50%', background: '#c4822a', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Bebas Neue', sans-serif", fontSize: 11, color: '#0d1f3c' }}>
+                                      {getInitials(person.first_name, person.last_name)}
+                                    </div>
+                                  )}
+                                  <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: '13px', color: '#f5edd6' }}>
+                                    {[person.first_name, person.last_name].filter(Boolean).join(' ') || 'Player'}
+                                  </span>
+                                </div>
+                              ))
+                            )}
+                          </div>
+                        )}
+
                         {(profile.highest_level || profile.status) && (
-                          <p style={{ margin: '6px 0 0', fontSize: '13px', color: 'rgba(245,237,214,0.5)', fontFamily: "'Barlow', sans-serif" }}>
+                          <p style={{ margin: '10px 0 0', fontSize: '13px', color: 'rgba(245,237,214,0.5)', fontFamily: "'Barlow', sans-serif" }}>
                             {[profile.highest_level, profile.status].filter(Boolean).join(' · ')}
                           </p>
                         )}
@@ -850,55 +979,39 @@ export default function ProfilePage() {
                 )}
               </div>
 
-              {/* ── Connections ── */}
+              {/* ── Following ── */}
               <div style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(196,130,42,0.2)', borderRadius: '16px', padding: '24px' }}>
                 <h2 style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: '20px', letterSpacing: '0.05em', margin: '0 0 16px', color: '#f5edd6' }}>
-                  {connections.length} <span style={{ color: '#c4822a' }}>Connection{connections.length !== 1 ? 's' : ''}</span>
+                  {followingCount} <span style={{ color: '#c4822a' }}>Following</span>
                 </h2>
 
-                {connections.length === 0 ? (
+                {followingList.length === 0 ? (
                   <p style={{ fontSize: '13px', color: 'rgba(245,237,214,0.35)', fontFamily: "'Barlow', sans-serif", margin: 0 }}>
-                    No connections yet — send a catch request to get started.
+                    Not following anyone yet — discover players to follow.
                   </p>
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                    {connections.map(conn => (
-                      <div key={conn.request_id} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 12px', background: 'rgba(255,255,255,0.03)', borderRadius: '8px', border: '1px solid rgba(245,237,214,0.06)' }}>
-                        {conn.other.avatar_url ? (
-                          <img src={conn.other.avatar_url} alt="" style={{ width: 38, height: 38, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
-                        ) : (
-                          <div style={{ width: 38, height: 38, borderRadius: '50%', background: '#c4822a', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Bebas Neue', sans-serif", fontSize: 14, color: '#0d1f3c' }}>
-                            {getInitials(conn.other.first_name, conn.other.last_name)}
-                          </div>
-                        )}
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: '14px', color: '#f5edd6', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
-                            {[conn.other.first_name, conn.other.last_name].filter(Boolean).join(' ') || 'Player'}
-                          </div>
-                          {conn.other.highest_level && (
-                            <div style={{ fontSize: '11px', color: 'rgba(245,237,214,0.4)', fontFamily: "'Barlow', sans-serif" }}>
-                              {conn.other.highest_level}
-                            </div>
-                          )}
-                        </div>
-                        <button
-                          onClick={() => {
-                            const btn = document.querySelector('button[aria-label="Open messages"]') as HTMLButtonElement | null
-                            btn?.click()
-                          }}
-                          style={{
-                            padding: '5px 12px', borderRadius: '6px', border: '1px solid rgba(196,130,42,0.35)',
-                            background: 'transparent', color: '#c4822a',
-                            fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700,
-                            fontSize: '11px', letterSpacing: '0.05em', cursor: 'pointer',
-                            flexShrink: 0, transition: 'background 0.15s',
-                          }}
-                          onMouseEnter={e => { e.currentTarget.style.background = 'rgba(196,130,42,0.1)' }}
-                          onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
-                        >
-                          Message
-                        </button>
-                      </div>
+                    {followingList.map(person => (
+                      <FollowRow key={person.id} person={person} />
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* ── Followers ── */}
+              <div style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(196,130,42,0.2)', borderRadius: '16px', padding: '24px' }}>
+                <h2 style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: '20px', letterSpacing: '0.05em', margin: '0 0 16px', color: '#f5edd6' }}>
+                  {followerCount} <span style={{ color: '#c4822a' }}>Follower{followerCount !== 1 ? 's' : ''}</span>
+                </h2>
+
+                {followersList.length === 0 ? (
+                  <p style={{ fontSize: '13px', color: 'rgba(245,237,214,0.35)', fontFamily: "'Barlow', sans-serif", margin: 0 }}>
+                    No followers yet.
+                  </p>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {followersList.map(person => (
+                      <FollowRow key={person.id} person={person} />
                     ))}
                   </div>
                 )}

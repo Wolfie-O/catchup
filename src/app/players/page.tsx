@@ -308,6 +308,8 @@ function PlayerModal({
   const [loading, setLoading] = useState(true)
   const [existingRequest, setExistingRequest] = useState<'pending' | 'accepted' | null>(null)
   const [requesting, setRequesting] = useState(false)
+  const [following, setFollowing] = useState(false)
+  const [followLoading, setFollowLoading] = useState(false)
   const panelRef = useRef<HTMLDivElement>(null)
 
   const fullName = [player.first_name, player.last_name].filter(Boolean).join(' ') || 'Unknown Player'
@@ -389,6 +391,15 @@ function PlayerModal({
         setExistingRequest(existing[0].status as 'pending' | 'accepted')
       }
 
+      // Check if already following
+      const { data: followData } = await supabase
+        .from('follows')
+        .select('follower_id')
+        .eq('follower_id', currentUserId)
+        .eq('following_id', player.id)
+        .maybeSingle()
+      setFollowing(!!followData)
+
       setLoading(false)
     }
     fetchData()
@@ -406,6 +417,21 @@ function PlayerModal({
       onToast(`Catch request sent to ${player.first_name || 'player'}!`)
     }
     setRequesting(false)
+  }
+
+  async function handleFollowToggle() {
+    setFollowLoading(true)
+    if (following) {
+      await supabase.from('follows').delete()
+        .eq('follower_id', currentUserId).eq('following_id', player.id)
+      setFollowing(false)
+      onToast(`Unfollowed ${player.first_name || 'player'}.`, 'info')
+    } else {
+      await supabase.from('follows').insert({ follower_id: currentUserId, following_id: player.id })
+      setFollowing(true)
+      onToast(`Now following ${player.first_name || 'player'}!`)
+    }
+    setFollowLoading(false)
   }
 
   const isPending  = existingRequest === 'pending'
@@ -459,7 +485,7 @@ function PlayerModal({
         <div style={{ overflowY: 'auto', flex: 1, padding: '28px 28px 0' }}>
 
           {/* ── Profile header ── */}
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', marginBottom: '24px', paddingRight: '24px' /* avoid overlap with close btn */ }}>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', marginBottom: '24px', paddingRight: '24px' }}>
             <Avatar url={player.avatar_url} first={player.first_name} last={player.last_name} size={100} />
 
             <div style={{ marginTop: '14px' }}>
@@ -499,6 +525,26 @@ function PlayerModal({
                     </span>
                   </>
                 )}
+              </div>
+
+              {/* Follow button */}
+              <div style={{ marginTop: '14px' }}>
+                <button
+                  onClick={handleFollowToggle}
+                  disabled={followLoading}
+                  style={{
+                    padding: '7px 26px', borderRadius: '99px',
+                    border: following ? 'none' : '1px solid #c4822a',
+                    background: following ? '#c4822a' : 'transparent',
+                    color: following ? '#0d1f3c' : '#c4822a',
+                    fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700,
+                    letterSpacing: '0.08em', textTransform: 'uppercase', fontSize: '12px',
+                    cursor: followLoading ? 'not-allowed' : 'pointer',
+                    transition: 'all 0.15s', opacity: followLoading ? 0.6 : 1,
+                  }}
+                >
+                  {following ? 'Following ✓' : '+ Follow'}
+                </button>
               </div>
             </div>
           </div>
@@ -661,7 +707,7 @@ function PlayerModal({
 // ── Player card ───────────────────────────────────────────────────────────────
 
 function PlayerCard({
-  player, currentUserId, userZip, distanceMi, onToast, onOpenModal,
+  player, currentUserId, userZip, distanceMi, onToast, onOpenModal, initialFollowing,
 }: {
   player: Profile
   currentUserId: string
@@ -669,8 +715,11 @@ function PlayerCard({
   distanceMi: number | null
   onToast: (msg: string, type?: 'success' | 'info') => void
   onOpenModal: () => void
+  initialFollowing: boolean
 }) {
   const [requesting, setRequesting] = useState(false)
+  const [following, setFollowing] = useState(initialFollowing)
+  const [followLoading, setFollowLoading] = useState(false)
   const age = calculateAge(player.date_of_birth)
   const isVerified = (player.vouches ?? 0) >= 3
   const fullName = [player.first_name, player.last_name].filter(Boolean).join(' ') || 'Unknown Player'
@@ -711,6 +760,21 @@ function PlayerCard({
     } finally {
       setRequesting(false)
     }
+  }
+
+  async function handleFollowToggle(e: React.MouseEvent) {
+    e.stopPropagation()
+    setFollowLoading(true)
+    if (following) {
+      await supabase.from('follows').delete()
+        .eq('follower_id', currentUserId).eq('following_id', player.id)
+      setFollowing(false)
+    } else {
+      await supabase.from('follows').insert({ follower_id: currentUserId, following_id: player.id })
+      setFollowing(true)
+      onToast(`Now following ${player.first_name || 'player'}!`)
+    }
+    setFollowLoading(false)
   }
 
   return (
@@ -788,29 +852,45 @@ function PlayerCard({
       )}
 
       {/* Action buttons */}
-      <div style={{ display: 'flex', gap: '8px', marginTop: 'auto', paddingTop: '4px' }}>
+      <div style={{ display: 'flex', gap: '6px', marginTop: 'auto', paddingTop: '4px' }}>
         <button
           onClick={handlePlayCatch}
           disabled={requesting}
           style={{
-            flex: 1, padding: '9px 8px', borderRadius: '8px', border: 'none',
+            flex: 2, padding: '9px 6px', borderRadius: '8px', border: 'none',
             cursor: requesting ? 'not-allowed' : 'pointer',
             background: requesting ? 'rgba(196,130,42,0.5)' : '#c4822a',
             color: '#0d1f3c', fontFamily: "'Barlow Condensed', sans-serif",
-            fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', fontSize: '12px',
+            fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', fontSize: '11px',
             transition: 'background 0.15s',
           }}
         >
           {requesting ? '…' : 'Play Catch'}
         </button>
         <button
+          onClick={handleFollowToggle}
+          disabled={followLoading}
+          style={{
+            flex: 1, padding: '9px 6px', borderRadius: '8px',
+            cursor: followLoading ? 'not-allowed' : 'pointer',
+            background: following ? '#c4822a' : 'transparent',
+            border: following ? 'none' : '1px solid #c4822a',
+            color: following ? '#0d1f3c' : '#c4822a',
+            fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700,
+            letterSpacing: '0.06em', textTransform: 'uppercase', fontSize: '11px',
+            transition: 'all 0.15s', opacity: followLoading ? 0.6 : 1,
+          }}
+        >
+          {following ? '✓' : 'Follow'}
+        </button>
+        <button
           onClick={e => { e.stopPropagation(); onToast('Vouch feature coming soon!', 'info') }}
           style={{
-            flex: 1, padding: '9px 8px', borderRadius: '8px',
+            flex: 1, padding: '9px 6px', borderRadius: '8px',
             cursor: 'pointer', background: 'transparent',
             border: '1px solid rgba(245,237,214,0.2)', color: 'rgba(245,237,214,0.7)',
             fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700,
-            letterSpacing: '0.08em', textTransform: 'uppercase', fontSize: '12px',
+            letterSpacing: '0.06em', textTransform: 'uppercase', fontSize: '11px',
             transition: 'all 0.15s',
           }}
           onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(196,130,42,0.5)'; e.currentTarget.style.color = '#c4822a' }}
@@ -830,7 +910,6 @@ export default function PlayersPage() {
 
   const [sessionLoading, setSessionLoading] = useState(true)
   const [userId, setUserId] = useState<string | null>(null)
-  const [userName, setUserName] = useState<string | null>(null)
   const [userZip, setUserZip] = useState('')
 
   const [players, setPlayers] = useState<Profile[]>([])
@@ -848,6 +927,7 @@ export default function PlayersPage() {
 
   const [toasts, setToasts] = useState<Toast[]>([])
   const [modalPlayer, setModalPlayer] = useState<Profile | null>(null)
+  const [followingSet, setFollowingSet] = useState<Set<string>>(new Set())
 
   function showToast(message: string, type: 'success' | 'info' = 'success') {
     const id = Date.now()
@@ -879,7 +959,6 @@ export default function PlayersPage() {
         .from('profiles').select('first_name, zip_code').eq('id', session.user.id).single()
 
       if (profile) {
-        setUserName(profile.first_name ?? null)
         setUserZip(profile.zip_code ?? '')
         if (profile.zip_code) {
           const coords = await getZipCoords(profile.zip_code)
@@ -899,16 +978,24 @@ export default function PlayersPage() {
     return () => subscription.unsubscribe()
   }, [router])
 
-  // ── Fetch all other players ───────────────────────────────────────────────
+  // ── Fetch all other players + follow status ───────────────────────────────
   useEffect(() => {
     if (!userId) return
     setZipCoordsReady(false)
     async function fetchPlayers() {
-      const { data } = await supabase
-        .from('profiles')
-        .select('id, first_name, last_name, date_of_birth, zip_code, positions, highest_level, status, bio, avatar_url, vouches')
-        .neq('id', userId)
-      const playerList: Profile[] = (data ?? []) as Profile[]
+      const [playersRes, followsRes] = await Promise.all([
+        supabase
+          .from('profiles')
+          .select('id, first_name, last_name, date_of_birth, zip_code, positions, highest_level, status, bio, avatar_url, vouches')
+          .neq('id', userId),
+        supabase
+          .from('follows')
+          .select('following_id')
+          .eq('follower_id', userId),
+      ])
+
+      const playerList: Profile[] = (playersRes.data ?? []) as Profile[]
+      setFollowingSet(new Set((followsRes.data ?? []).map((f: { following_id: string }) => f.following_id)))
 
       if (playerList.length === 0) {
         setPlayers([]); setPlayersLoading(false); setZipCoordsReady(true); return
@@ -1116,6 +1203,7 @@ export default function PlayersPage() {
                   distanceMi={distanceMi}
                   onToast={showToast}
                   onOpenModal={() => setModalPlayer(player)}
+                  initialFollowing={followingSet.has(player.id)}
                 />
               )
             })}
