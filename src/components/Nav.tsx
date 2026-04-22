@@ -92,6 +92,7 @@ export default function Nav() {
       <div className="hidden md:flex items-center gap-1">
         {userId && navLink('/players', 'Players')}
         {userId && navLink('/feed', 'Feed')}
+        {userId && navLink('/teams', 'Teams')}
         <div className="flex items-center gap-2 ml-2">
           {userId ? (
             <>
@@ -178,6 +179,7 @@ export default function Nav() {
               }}>
                 {navLink('/players', 'Players', true)}
                 {navLink('/feed', 'Feed', true)}
+                {navLink('/teams', 'Teams', true)}
                 {navLink('/profile', firstName ?? 'My Profile', true)}
                 <div style={{ borderTop: '1px solid rgba(196,130,42,0.2)', margin: '4px 0' }} />
                 <button
