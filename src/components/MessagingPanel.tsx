@@ -31,6 +31,12 @@ type Message = {
   created_at: string
 }
 
+type PartnerRequest = {
+  id: string
+  follower_id: string
+  follower: Profile
+}
+
 type View = 'list' | 'chat' | 'accept-decline'
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -127,6 +133,7 @@ export default function MessagingPanel() {
   const [messages, setMessages] = useState<Message[]>([])
   const [loadingMsgs, setLoadingMsgs] = useState(false)
 
+  const [partnerRequests, setPartnerRequests] = useState<PartnerRequest[]>([])
   const [badgeCount, setBadgeCount] = useState(0)
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
@@ -223,19 +230,52 @@ export default function MessagingPanel() {
     setLoadingConvs(false)
   }, [])
 
-  useEffect(() => {
-    if (userId) fetchConversations(userId)
-  }, [userId, fetchConversations])
+  // ── Fetch partner requests ─────────────────────────────────────────────────
 
-  // ── Badge count: pending requests where current user is receiver ───────────
+  const fetchPartnerRequests = useCallback(async (uid: string) => {
+    const { data: followsData } = await supabase
+      .from('follows')
+      .select('id, follower_id')
+      .eq('following_id', uid)
+      .eq('status', 'pending')
+
+    const rows = (followsData ?? []) as { id: string; follower_id: string }[]
+    if (rows.length === 0) { setPartnerRequests([]); return }
+
+    const followerIds = rows.map(r => r.follower_id)
+    const { data: profilesData } = await supabase
+      .from('profiles')
+      .select('id, first_name, last_name, avatar_url')
+      .in('id', followerIds)
+
+    const profileMap: Record<string, Profile> = {}
+    for (const p of (profilesData ?? []) as Profile[]) {
+      profileMap[p.id] = p
+    }
+
+    setPartnerRequests(rows.map(r => ({
+      id: r.id,
+      follower_id: r.follower_id,
+      follower: profileMap[r.follower_id] ?? { id: r.follower_id, first_name: null, last_name: null, avatar_url: null },
+    })))
+  }, [])
+
+  useEffect(() => {
+    if (userId) {
+      fetchConversations(userId)
+      fetchPartnerRequests(userId)
+    }
+  }, [userId, fetchConversations, fetchPartnerRequests])
+
+  // ── Badge count: pending catch requests + pending partner requests ─────────
 
   useEffect(() => {
     if (!userId) { setBadgeCount(0); return }
-    const count = conversations.filter(
+    const catchCount = conversations.filter(
       c => c.status === 'pending' && c.receiver_id === userId
     ).length
-    setBadgeCount(count)
-  }, [conversations, userId])
+    setBadgeCount(catchCount + partnerRequests.length)
+  }, [conversations, partnerRequests, userId])
 
   // ── Fetch messages for active conversation ─────────────────────────────────
 
@@ -389,10 +429,23 @@ export default function MessagingPanel() {
     setMessages([])
   }
 
+  async function acceptPartnerRequest(req: PartnerRequest) {
+    await supabase.from('follows').update({ status: 'accepted' }).eq('id', req.id)
+    setPartnerRequests(prev => prev.filter(r => r.id !== req.id))
+  }
+
+  async function declinePartnerRequest(req: PartnerRequest) {
+    await supabase.from('follows').update({ status: 'declined' }).eq('id', req.id)
+    setPartnerRequests(prev => prev.filter(r => r.id !== req.id))
+  }
+
   function handleOpen() {
     setOpen(o => {
       const next = !o
-      if (next && userId) fetchConversations(userId)
+      if (next && userId) {
+        fetchConversations(userId)
+        fetchPartnerRequests(userId)
+      }
       return next
     })
   }
@@ -416,7 +469,7 @@ export default function MessagingPanel() {
       )
     }
 
-    if (conversations.length === 0) {
+    if (conversations.length === 0 && partnerRequests.length === 0) {
       return (
         <div style={{
           flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center',
@@ -435,6 +488,89 @@ export default function MessagingPanel() {
 
     return (
       <div style={{ flex: 1, overflowY: 'auto' }}>
+
+        {/* ── Partner Requests section ── */}
+        {partnerRequests.length > 0 && (
+          <div>
+            <div style={{
+              padding: '8px 16px 4px',
+              fontFamily: "'Barlow Condensed', sans-serif",
+              fontWeight: 700, fontSize: '10px', letterSpacing: '0.1em',
+              textTransform: 'uppercase', color: '#c4822a',
+            }}>
+              Partner Requests
+            </div>
+            {partnerRequests.map(req => {
+              const name = [req.follower.first_name, req.follower.last_name].filter(Boolean).join(' ') || 'Unknown Player'
+              return (
+                <div key={req.id} style={{
+                  display: 'flex', alignItems: 'center', gap: '10px',
+                  padding: '10px 16px',
+                  borderBottom: '1px solid rgba(255,255,255,0.04)',
+                }}>
+                  <MiniAvatar profile={req.follower} size={38} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{
+                      fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700,
+                      fontSize: '13px', color: '#f5edd6',
+                      overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis',
+                    }}>
+                      {name}
+                    </div>
+                    <div style={{
+                      fontSize: '11px', color: 'rgba(245,237,214,0.4)',
+                      fontFamily: "'Barlow', sans-serif", marginTop: '1px',
+                    }}>
+                      wants to be your catch partner
+                    </div>
+                    <div style={{ display: 'flex', gap: '6px', marginTop: '6px' }}>
+                      <button
+                        onClick={() => acceptPartnerRequest(req)}
+                        style={{
+                          flex: 1, padding: '5px 8px', borderRadius: '6px',
+                          background: 'rgba(45,90,27,0.7)', color: '#48bb78',
+                          fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700,
+                          fontSize: '11px', letterSpacing: '0.05em', cursor: 'pointer',
+                          border: '1px solid rgba(72,187,120,0.4)', transition: 'background 0.15s',
+                        }}
+                        onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(45,90,27,0.95)' }}
+                        onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(45,90,27,0.7)' }}
+                      >
+                        Accept ✓
+                      </button>
+                      <button
+                        onClick={() => declinePartnerRequest(req)}
+                        style={{
+                          flex: 1, padding: '5px 8px', borderRadius: '6px',
+                          background: 'transparent', color: 'rgba(245,237,214,0.55)',
+                          fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700,
+                          fontSize: '11px', letterSpacing: '0.05em', cursor: 'pointer',
+                          border: '1px solid rgba(245,237,214,0.18)', transition: 'all 0.15s',
+                        }}
+                        onMouseEnter={e => {
+                          const el = e.currentTarget as HTMLButtonElement
+                          el.style.borderColor = 'rgba(229,62,62,0.5)'
+                          el.style.color = '#fc8181'
+                        }}
+                        onMouseLeave={e => {
+                          const el = e.currentTarget as HTMLButtonElement
+                          el.style.borderColor = 'rgba(245,237,214,0.18)'
+                          el.style.color = 'rgba(245,237,214,0.55)'
+                        }}
+                      >
+                        Decline
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
+            {conversations.length > 0 && (
+              <div style={{ height: '1px', background: 'rgba(196,130,42,0.15)', margin: '4px 0' }} />
+            )}
+          </div>
+        )}
+
         {conversations.map(conv => {
           const other = getOtherPlayer(conv)
           const isReceived = conv.receiver_id === userId
