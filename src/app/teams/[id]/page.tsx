@@ -467,6 +467,17 @@ export default function TeamDetailPage() {
 
     setMembers(built.filter(m => m.status === 'active'))
     setPendingMembers(built.filter(m => m.status === 'pending'))
+
+    // Load existing invite token if one exists
+    const { data: inviteData } = await supabase
+      .from('team_invites')
+      .select('token')
+      .eq('team_id', teamId)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    if (inviteData?.token) setInviteToken(inviteData.token)
+
     setRosterLoading(false)
     setRosterLoaded(true)
   }, [teamId, rosterLoaded])
@@ -508,8 +519,11 @@ export default function TeamDetailPage() {
     if (!userId || !teamId) return
     setInviteTokenLoading(true)
     const token = crypto.randomUUID()
-    const { error } = await supabase.from('team_invites').insert({ team_id: teamId, token, created_by: userId })
+    const { error } = await supabase.from('team_invites').insert({
+      team_id: teamId, token, invited_by: userId, status: 'pending',
+    })
     if (!error) setInviteToken(token)
+    else showToast('Failed to generate link.', false)
     setInviteTokenLoading(false)
   }
 
@@ -518,6 +532,7 @@ export default function TeamDetailPage() {
     const url = `${window.location.origin}/teams/${teamId}/join?token=${inviteToken}`
     await navigator.clipboard.writeText(url)
     setCopied(true)
+    showToast('Link copied!')
     setTimeout(() => setCopied(false), 2000)
   }
 
@@ -1004,8 +1019,8 @@ export default function TeamDetailPage() {
                 </div>
               )}
 
-              {/* Invite link (admin only) */}
-              {isAdmin && (
+              {/* Invite link (admin + coach) */}
+              {canManage && (
                 <div style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(196,130,42,0.2)', borderRadius: '12px', padding: '18px' }}>
                   <h3 style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: '18px', letterSpacing: '0.05em', margin: '0 0 10px', color: '#f5edd6' }}>
                     Invite <span style={{ color: '#c4822a' }}>Players</span>
