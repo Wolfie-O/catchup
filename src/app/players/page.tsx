@@ -42,6 +42,7 @@ type ModalPost = {
   userLiked: boolean
 }
 
+type PartnerStatus = 'none' | 'pending' | 'accepted'
 type Toast = { id: number; message: string; type: 'success' | 'info' }
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -137,7 +138,7 @@ function formatTimeAgo(ts: string): string {
   return new Date(ts).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 }
 
-// ── Shared input/select style tokens ─────────────────────────────────────────
+// ── Style tokens ──────────────────────────────────────────────────────────────
 
 const FILTER_INPUT: React.CSSProperties = {
   width: '100%', padding: '9px 12px', borderRadius: '8px', fontSize: '13px',
@@ -241,6 +242,48 @@ function Avatar({ url, first, last, size = 56 }: {
   )
 }
 
+// ── Partner Up button (shared style) ─────────────────────────────────────────
+
+function PartnerButton({
+  status, loading, onClick, small = false,
+}: {
+  status: PartnerStatus
+  loading: boolean
+  onClick: (e: React.MouseEvent) => void
+  small?: boolean
+}) {
+  const label = status === 'accepted' ? 'Partners ✓' : status === 'pending' ? 'Requested' : 'Partner Up'
+  const isFilled = status === 'accepted'
+  const isMuted  = status === 'pending'
+  const isActive = status === 'none'
+
+  return (
+    <button
+      onClick={onClick}
+      disabled={!isActive || loading}
+      style={{
+        padding: small ? '3px 9px' : '7px 22px',
+        borderRadius: '99px',
+        fontSize: small ? '10px' : '12px',
+        fontFamily: "'Barlow Condensed', sans-serif",
+        fontWeight: 700,
+        letterSpacing: '0.07em',
+        textTransform: 'uppercase',
+        whiteSpace: 'nowrap',
+        flexShrink: 0,
+        cursor: isActive && !loading ? 'pointer' : 'default',
+        border: isFilled ? 'none' : `1px solid ${isMuted ? 'rgba(196,130,42,0.35)' : '#c4822a'}`,
+        background: isFilled ? '#c4822a' : 'transparent',
+        color: isFilled ? '#0d1f3c' : isMuted ? 'rgba(196,130,42,0.5)' : '#c4822a',
+        transition: 'all 0.15s',
+        opacity: loading ? 0.6 : 1,
+      }}
+    >
+      {label}
+    </button>
+  )
+}
+
 // ── Modal post card ───────────────────────────────────────────────────────────
 
 function ModalPostCard({ post, currentUserId }: { post: ModalPost; currentUserId: string }) {
@@ -308,40 +351,34 @@ function PlayerModal({
   const [loading, setLoading] = useState(true)
   const [existingRequest, setExistingRequest] = useState<'pending' | 'accepted' | null>(null)
   const [requesting, setRequesting] = useState(false)
-  const [following, setFollowing] = useState(false)
-  const [followLoading, setFollowLoading] = useState(false)
+  const [partnerStatus, setPartnerStatus] = useState<PartnerStatus>('none')
+  const [partnerLoading, setPartnerLoading] = useState(false)
   const panelRef = useRef<HTMLDivElement>(null)
 
   const fullName = [player.first_name, player.last_name].filter(Boolean).join(' ') || 'Unknown Player'
   const isVerified = (player.vouches ?? 0) >= 3
 
-  // Fade-in + body scroll lock
   useEffect(() => {
     requestAnimationFrame(() => setVisible(true))
     document.body.style.overflow = 'hidden'
     return () => { document.body.style.overflow = '' }
   }, [])
 
-  // Escape key to close
   useEffect(() => {
     function onKey(e: KeyboardEvent) { if (e.key === 'Escape') onClose() }
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
   }, [onClose])
 
-  // Fetch all modal data
   useEffect(() => {
     async function fetchData() {
-      // City name
       if (player.zip_code) fetchCity(player.zip_code).then(c => setCityName(c))
 
-      // Playing history
       const { data: histData } = await supabase
         .from('playing_history').select('*')
         .eq('user_id', player.id).order('year_start', { ascending: false })
       setHistory((histData ?? []) as PlayingHistory[])
 
-      // Posts (limit 5) + total count in parallel
       const [postsRes, countRes] = await Promise.all([
         supabase.from('posts')
           .select('id, content, image_url, created_at')
@@ -377,7 +414,6 @@ function PlayerModal({
         })))
       }
 
-      // Existing catch request
       const { data: existing } = await supabase
         .from('catch_requests').select('status')
         .or(
@@ -391,14 +427,16 @@ function PlayerModal({
         setExistingRequest(existing[0].status as 'pending' | 'accepted')
       }
 
-      // Check if already following
+      // Check partner status
       const { data: followData } = await supabase
         .from('follows')
-        .select('follower_id')
+        .select('status')
         .eq('follower_id', currentUserId)
         .eq('following_id', player.id)
         .maybeSingle()
-      setFollowing(!!followData)
+      if (followData) {
+        setPartnerStatus(followData.status as PartnerStatus)
+      }
 
       setLoading(false)
     }
@@ -419,19 +457,19 @@ function PlayerModal({
     setRequesting(false)
   }
 
-  async function handleFollowToggle() {
-    setFollowLoading(true)
-    if (following) {
-      await supabase.from('follows').delete()
-        .eq('follower_id', currentUserId).eq('following_id', player.id)
-      setFollowing(false)
-      onToast(`Unfollowed ${player.first_name || 'player'}.`, 'info')
+  async function handlePartnerUp() {
+    if (partnerStatus !== 'none' || partnerLoading) return
+    setPartnerLoading(true)
+    const { error } = await supabase.from('follows').insert({
+      follower_id: currentUserId, following_id: player.id, status: 'pending',
+    })
+    if (error) {
+      onToast('Something went wrong. Try again.', 'info')
     } else {
-      await supabase.from('follows').insert({ follower_id: currentUserId, following_id: player.id })
-      setFollowing(true)
-      onToast(`Now following ${player.first_name || 'player'}!`)
+      setPartnerStatus('pending')
+      onToast(`Partner request sent to ${player.first_name || 'player'}!`)
     }
-    setFollowLoading(false)
+    setPartnerLoading(false)
   }
 
   const isPending  = existingRequest === 'pending'
@@ -449,7 +487,6 @@ function PlayerModal({
         transition: 'opacity 0.2s ease',
       }}
     >
-      {/* Modal panel */}
       <div
         ref={panelRef}
         onClick={e => e.stopPropagation()}
@@ -527,24 +564,13 @@ function PlayerModal({
                 )}
               </div>
 
-              {/* Follow button */}
+              {/* Partner Up button */}
               <div style={{ marginTop: '14px' }}>
-                <button
-                  onClick={handleFollowToggle}
-                  disabled={followLoading}
-                  style={{
-                    padding: '7px 26px', borderRadius: '99px',
-                    border: following ? 'none' : '1px solid #c4822a',
-                    background: following ? '#c4822a' : 'transparent',
-                    color: following ? '#0d1f3c' : '#c4822a',
-                    fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700,
-                    letterSpacing: '0.08em', textTransform: 'uppercase', fontSize: '12px',
-                    cursor: followLoading ? 'not-allowed' : 'pointer',
-                    transition: 'all 0.15s', opacity: followLoading ? 0.6 : 1,
-                  }}
-                >
-                  {following ? 'Following ✓' : '+ Follow'}
-                </button>
+                <PartnerButton
+                  status={partnerStatus}
+                  loading={partnerLoading}
+                  onClick={e => { e.stopPropagation(); handlePartnerUp() }}
+                />
               </div>
             </div>
           </div>
@@ -572,7 +598,6 @@ function PlayerModal({
             </p>
           )}
 
-          {/* Divider */}
           <div style={{ height: '1px', background: 'rgba(196,130,42,0.15)', marginBottom: '24px' }} />
 
           {loading ? (
@@ -581,7 +606,6 @@ function PlayerModal({
             </div>
           ) : (
             <>
-              {/* ── Where They've Played ── */}
               {history.length > 0 && (
                 <div style={{ marginBottom: '28px' }}>
                   <h3 style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: '20px', letterSpacing: '0.05em', margin: '0 0 12px', color: '#f5edd6' }}>
@@ -610,9 +634,8 @@ function PlayerModal({
                 </div>
               )}
 
-              {/* ── Posts ── */}
               {posts.length > 0 && (
-                <div style={{ marginBottom: '0' }}>
+                <div>
                   <h3 style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: '20px', letterSpacing: '0.05em', margin: '0 0 12px', color: '#f5edd6' }}>
                     Posts
                   </h3>
@@ -631,7 +654,6 @@ function PlayerModal({
             </>
           )}
 
-          {/* Spacer so content doesn't hide behind sticky buttons */}
           <div style={{ height: '140px' }} />
         </div>
 
@@ -644,7 +666,6 @@ function PlayerModal({
           pointerEvents: 'none',
         }}>
           <div style={{ pointerEvents: 'all', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            {/* Play Catch / Pending / Connected */}
             {isAccepted ? (
               <button disabled style={{
                 width: '100%', padding: '13px', borderRadius: '9px', border: 'none',
@@ -682,7 +703,6 @@ function PlayerModal({
               </button>
             )}
 
-            {/* Vouch */}
             <button
               onClick={() => onToast('Vouch feature coming soon!', 'info')}
               style={{
@@ -707,7 +727,7 @@ function PlayerModal({
 // ── Player card ───────────────────────────────────────────────────────────────
 
 function PlayerCard({
-  player, currentUserId, userZip, distanceMi, onToast, onOpenModal, initialFollowing,
+  player, currentUserId, userZip, distanceMi, onToast, onOpenModal, initialPartnerStatus,
 }: {
   player: Profile
   currentUserId: string
@@ -715,11 +735,11 @@ function PlayerCard({
   distanceMi: number | null
   onToast: (msg: string, type?: 'success' | 'info') => void
   onOpenModal: () => void
-  initialFollowing: boolean
+  initialPartnerStatus: PartnerStatus
 }) {
   const [requesting, setRequesting] = useState(false)
-  const [following, setFollowing] = useState(initialFollowing)
-  const [followLoading, setFollowLoading] = useState(false)
+  const [partnerStatus, setPartnerStatus] = useState<PartnerStatus>(initialPartnerStatus)
+  const [partnerLoading, setPartnerLoading] = useState(false)
   const age = calculateAge(player.date_of_birth)
   const isVerified = (player.vouches ?? 0) >= 3
   const fullName = [player.first_name, player.last_name].filter(Boolean).join(' ') || 'Unknown Player'
@@ -741,10 +761,7 @@ function PlayerCard({
         )
         .in('status', ['pending', 'accepted'])
 
-      if (checkError) {
-        onToast('Something went wrong. Try again.', 'info')
-        return
-      }
+      if (checkError) { onToast('Something went wrong. Try again.', 'info'); return }
       if (existing && existing.length > 0) {
         onToast(`You already have an active request with ${player.first_name || 'this player'}!`, 'info')
         return
@@ -762,19 +779,20 @@ function PlayerCard({
     }
   }
 
-  async function handleFollowToggle(e: React.MouseEvent) {
+  async function handlePartnerUp(e: React.MouseEvent) {
     e.stopPropagation()
-    setFollowLoading(true)
-    if (following) {
-      await supabase.from('follows').delete()
-        .eq('follower_id', currentUserId).eq('following_id', player.id)
-      setFollowing(false)
+    if (partnerStatus !== 'none' || partnerLoading) return
+    setPartnerLoading(true)
+    const { error } = await supabase.from('follows').insert({
+      follower_id: currentUserId, following_id: player.id, status: 'pending',
+    })
+    if (!error) {
+      setPartnerStatus('pending')
+      onToast(`Partner request sent to ${player.first_name || 'player'}!`)
     } else {
-      await supabase.from('follows').insert({ follower_id: currentUserId, following_id: player.id })
-      setFollowing(true)
-      onToast(`Now following ${player.first_name || 'player'}!`)
+      onToast('Something went wrong. Try again.', 'info')
     }
-    setFollowLoading(false)
+    setPartnerLoading(false)
   }
 
   return (
@@ -789,30 +807,41 @@ function PlayerCard({
       onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.borderColor = 'rgba(196,130,42,0.45)'; (e.currentTarget as HTMLDivElement).style.background = 'rgba(255,255,255,0.06)' }}
       onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.borderColor = 'rgba(196,130,42,0.2)'; (e.currentTarget as HTMLDivElement).style.background = 'rgba(255,255,255,0.04)' }}
     >
-      {/* Header: avatar + name + verified badge */}
+      {/* Header: avatar + name + Partner Up pill */}
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
         <Avatar url={player.avatar_url} first={player.first_name} last={player.last_name} />
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '6px' }}>
-            <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: '16px', color: '#f5edd6', lineHeight: 1.2 }}>
-              {fullName}
-            </span>
-            {isVerified && (
-              <span style={{
-                fontSize: '10px', fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700,
-                letterSpacing: '0.06em', color: '#f0b429',
-                background: 'rgba(240,180,41,0.1)', border: '1px solid rgba(240,180,41,0.3)',
-                borderRadius: '4px', padding: '1px 5px',
-              }}>
-                ★ Verified
-              </span>
-            )}
-          </div>
-          {meta && (
-            <div style={{ fontSize: '12px', color: 'rgba(245,237,214,0.45)', marginTop: '3px', fontFamily: "'Barlow', sans-serif" }}>
-              {meta}
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '6px' }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '5px' }}>
+                <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: '16px', color: '#f5edd6', lineHeight: 1.2 }}>
+                  {fullName}
+                </span>
+                {isVerified && (
+                  <span style={{
+                    fontSize: '10px', fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700,
+                    letterSpacing: '0.06em', color: '#f0b429',
+                    background: 'rgba(240,180,41,0.1)', border: '1px solid rgba(240,180,41,0.3)',
+                    borderRadius: '4px', padding: '1px 5px',
+                  }}>
+                    ★ Verified
+                  </span>
+                )}
+              </div>
+              {meta && (
+                <div style={{ fontSize: '12px', color: 'rgba(245,237,214,0.45)', marginTop: '3px', fontFamily: "'Barlow', sans-serif" }}>
+                  {meta}
+                </div>
+              )}
             </div>
-          )}
+            {/* Partner Up pill button */}
+            <PartnerButton
+              status={partnerStatus}
+              loading={partnerLoading}
+              onClick={handlePartnerUp}
+              small
+            />
+          </div>
         </div>
       </div>
 
@@ -851,46 +880,30 @@ function PlayerCard({
         </p>
       )}
 
-      {/* Action buttons */}
-      <div style={{ display: 'flex', gap: '6px', marginTop: 'auto', paddingTop: '4px' }}>
+      {/* Action buttons: Play Catch + Vouch */}
+      <div style={{ display: 'flex', gap: '8px', marginTop: 'auto', paddingTop: '4px' }}>
         <button
           onClick={handlePlayCatch}
           disabled={requesting}
           style={{
-            flex: 2, padding: '9px 6px', borderRadius: '8px', border: 'none',
+            flex: 1, padding: '9px 8px', borderRadius: '8px', border: 'none',
             cursor: requesting ? 'not-allowed' : 'pointer',
             background: requesting ? 'rgba(196,130,42,0.5)' : '#c4822a',
             color: '#0d1f3c', fontFamily: "'Barlow Condensed', sans-serif",
-            fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', fontSize: '11px',
+            fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', fontSize: '12px',
             transition: 'background 0.15s',
           }}
         >
           {requesting ? '…' : 'Play Catch'}
         </button>
         <button
-          onClick={handleFollowToggle}
-          disabled={followLoading}
-          style={{
-            flex: 1, padding: '9px 6px', borderRadius: '8px',
-            cursor: followLoading ? 'not-allowed' : 'pointer',
-            background: following ? '#c4822a' : 'transparent',
-            border: following ? 'none' : '1px solid #c4822a',
-            color: following ? '#0d1f3c' : '#c4822a',
-            fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700,
-            letterSpacing: '0.06em', textTransform: 'uppercase', fontSize: '11px',
-            transition: 'all 0.15s', opacity: followLoading ? 0.6 : 1,
-          }}
-        >
-          {following ? '✓' : 'Follow'}
-        </button>
-        <button
           onClick={e => { e.stopPropagation(); onToast('Vouch feature coming soon!', 'info') }}
           style={{
-            flex: 1, padding: '9px 6px', borderRadius: '8px',
+            flex: 1, padding: '9px 8px', borderRadius: '8px',
             cursor: 'pointer', background: 'transparent',
             border: '1px solid rgba(245,237,214,0.2)', color: 'rgba(245,237,214,0.7)',
             fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700,
-            letterSpacing: '0.06em', textTransform: 'uppercase', fontSize: '11px',
+            letterSpacing: '0.08em', textTransform: 'uppercase', fontSize: '12px',
             transition: 'all 0.15s',
           }}
           onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(196,130,42,0.5)'; e.currentTarget.style.color = '#c4822a' }}
@@ -927,7 +940,8 @@ export default function PlayersPage() {
 
   const [toasts, setToasts] = useState<Toast[]>([])
   const [modalPlayer, setModalPlayer] = useState<Profile | null>(null)
-  const [followingSet, setFollowingSet] = useState<Set<string>>(new Set())
+  // Map of player.id -> PartnerStatus
+  const [partnerStatusMap, setPartnerStatusMap] = useState<Record<string, PartnerStatus>>({})
 
   function showToast(message: string, type: 'success' | 'info' = 'success') {
     const id = Date.now()
@@ -935,21 +949,15 @@ export default function PlayersPage() {
     setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 3500)
   }
 
-  // ── Pre-fetch all zip coords, then mark filter as ready ──────────────────
   const prefetchAllZips = useCallback(async (fetchedPlayers: Profile[], currentUserZip: string) => {
-    console.log('[Players] prefetching zips for players:', fetchedPlayers.map(p => p.zip_code))
     const allZips = [...new Set([
       ...fetchedPlayers.map(p => p.zip_code).filter(Boolean) as string[],
       ...(currentUserZip ? [currentUserZip] : []),
     ])]
-    await Promise.all(allZips.map(async zip => {
-      const coords = await getZipCoords(zip)
-      console.log('[Players] prefetched zip:', zip, coords)
-    }))
+    await Promise.all(allZips.map(zip => getZipCoords(zip)))
     setZipCoordsReady(true)
   }, [])
 
-  // ── Auth check + fetch own profile ────────────────────────────────────────
   useEffect(() => {
     async function init() {
       const { data: { session } } = await supabase.auth.getSession()
@@ -978,7 +986,7 @@ export default function PlayersPage() {
     return () => subscription.unsubscribe()
   }, [router])
 
-  // ── Fetch all other players + follow status ───────────────────────────────
+  // Fetch players + partner statuses in parallel
   useEffect(() => {
     if (!userId) return
     setZipCoordsReady(false)
@@ -990,12 +998,19 @@ export default function PlayersPage() {
           .neq('id', userId),
         supabase
           .from('follows')
-          .select('following_id')
-          .eq('follower_id', userId),
+          .select('following_id, status')
+          .eq('follower_id', userId)
+          .in('status', ['pending', 'accepted']),
       ])
 
       const playerList: Profile[] = (playersRes.data ?? []) as Profile[]
-      setFollowingSet(new Set((followsRes.data ?? []).map((f: { following_id: string }) => f.following_id)))
+
+      // Build partner status map
+      const statusMap: Record<string, PartnerStatus> = {}
+      for (const f of (followsRes.data ?? []) as { following_id: string; status: string }[]) {
+        statusMap[f.following_id] = f.status as PartnerStatus
+      }
+      setPartnerStatusMap(statusMap)
 
       if (playerList.length === 0) {
         setPlayers([]); setPlayersLoading(false); setZipCoordsReady(true); return
@@ -1008,10 +1023,7 @@ export default function PlayersPage() {
     fetchPlayers()
   }, [userId, prefetchAllZips, userZip])
 
-  // ── Filter + sort ─────────────────────────────────────────────────────────
   const filtered = useMemo(() => {
-    console.log('[Players] filtering with cache size:', Object.keys(zipCache).length, '| zipCoordsReady:', zipCoordsReady, '| distanceFilter:', distanceFilter, '| userCoords:', userCoords)
-
     let list = [...players]
 
     if (search.trim()) {
@@ -1028,24 +1040,13 @@ export default function PlayersPage() {
     if (ageFilter)      list = list.filter(p => ageInRange(calculateAge(p.date_of_birth), ageFilter))
 
     if (distanceFilter !== 'everywhere' && zipCoordsReady && userCoords) {
-      if (distanceFilter === 'area') {
-        list = list.filter(p => {
-          if (!p.zip_code) return true
-          const c = zipCache[p.zip_code]
-          if (c === undefined || c === null) return true
-          const d = getDistance(userCoords.lat, userCoords.lon, c.lat, c.lon)
-          return d <= 10
-        })
-      } else {
-        const maxMi = parseInt(distanceFilter)
-        list = list.filter(p => {
-          if (!p.zip_code) return true
-          const c = zipCache[p.zip_code]
-          if (c === undefined || c === null) return true
-          const d = getDistance(userCoords.lat, userCoords.lon, c.lat, c.lon)
-          return d <= maxMi
-        })
-      }
+      const maxMi = distanceFilter === 'area' ? 10 : parseInt(distanceFilter)
+      list = list.filter(p => {
+        if (!p.zip_code) return true
+        const c = zipCache[p.zip_code]
+        if (c === undefined || c === null) return true
+        return getDistance(userCoords.lat, userCoords.lon, c.lat, c.lon) <= maxMi
+      })
     }
 
     list.sort((a, b) => {
@@ -1062,7 +1063,6 @@ export default function PlayersPage() {
     return list
   }, [players, search, levelFilter, statusFilter, positionFilter, ageFilter, distanceFilter, userCoords, zipCoordsReady])
 
-  // ── Loading screen ────────────────────────────────────────────────────────
   if (sessionLoading) {
     return (
       <AuthenticatedLayout>
@@ -1073,7 +1073,6 @@ export default function PlayersPage() {
     )
   }
 
-  // ── Compute modal player distance ─────────────────────────────────────────
   const modalDistanceMi = modalPlayer && userCoords && modalPlayer.zip_code
     ? (() => {
         const c = zipCache[modalPlayer.zip_code!]
@@ -1081,7 +1080,6 @@ export default function PlayersPage() {
       })()
     : null
 
-  // ── Render ────────────────────────────────────────────────────────────────
   return (
     <AuthenticatedLayout>
     <div style={{ minHeight: '100vh', background: '#0d1f3c', color: '#f5edd6', fontFamily: "'Barlow', sans-serif" }}>
@@ -1090,7 +1088,6 @@ export default function PlayersPage() {
 
       <main style={{ maxWidth: '1200px', margin: '0 auto', padding: '32px 16px 80px' }}>
 
-        {/* Page header */}
         <div style={{ marginBottom: '24px' }}>
           <h1 style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 'clamp(36px, 6vw, 56px)', letterSpacing: '0.05em', margin: 0, lineHeight: 1 }}>
             Find <span style={{ color: '#c4822a' }}>Players</span>
@@ -1155,38 +1152,32 @@ export default function PlayersPage() {
           </div>
         </div>
 
-        {/* Location unavailable notice */}
         {zipCoordsReady && userCoords === null && distanceFilter !== 'everywhere' && (
           <p style={{ fontSize: '12px', color: 'rgba(245,237,214,0.35)', fontFamily: "'Barlow', sans-serif", margin: '-14px 0 20px' }}>
             Location not available — showing all players
           </p>
         )}
 
-        {/* Player grid / empty states */}
         {playersLoading ? (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '16px' }}>
             {Array.from({ length: 8 }).map((_, i) => <SkeletonCard key={i} />)}
           </div>
-
         ) : !zipCoordsReady && distanceFilter !== 'everywhere' ? (
           <p style={{ fontSize: '13px', color: 'rgba(245,237,214,0.35)', fontFamily: "'Barlow', sans-serif", textAlign: 'center', padding: '48px 0' }}>
             Loading nearby players…
           </p>
-
         ) : players.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '80px 20px' }}>
             <div style={{ fontSize: '52px', marginBottom: '16px' }}>⚾</div>
             <h2 style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: '32px', letterSpacing: '0.05em', color: '#f5edd6', margin: '0 0 8px' }}>No Players Yet</h2>
             <p style={{ color: 'rgba(245,237,214,0.5)', fontSize: '15px', margin: 0 }}>Be the first player in your area!</p>
           </div>
-
         ) : filtered.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '80px 20px' }}>
             <div style={{ fontSize: '52px', marginBottom: '16px' }}>🔍</div>
             <h2 style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: '32px', letterSpacing: '0.05em', color: '#f5edd6', margin: '0 0 8px' }}>No Matches</h2>
             <p style={{ color: 'rgba(245,237,214,0.5)', fontSize: '15px', margin: 0 }}>No players found matching your filters.</p>
           </div>
-
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '16px' }}>
             {filtered.map(player => {
@@ -1203,7 +1194,7 @@ export default function PlayersPage() {
                   distanceMi={distanceMi}
                   onToast={showToast}
                   onOpenModal={() => setModalPlayer(player)}
-                  initialFollowing={followingSet.has(player.id)}
+                  initialPartnerStatus={partnerStatusMap[player.id] ?? 'none'}
                 />
               )
             })}
@@ -1215,7 +1206,6 @@ export default function PlayersPage() {
       <ToastContainer toasts={toasts} />
     </div>
 
-    {/* Player modal */}
     {modalPlayer && (
       <PlayerModal
         player={modalPlayer}
