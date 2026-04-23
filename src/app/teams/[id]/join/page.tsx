@@ -95,11 +95,33 @@ function JoinPageInner() {
 
     async function validate() {
       try {
-        console.log('[JoinPage] --- querying team_invites ---')
-        console.log('[JoinPage] filtering ONLY on token:', token)
+        // ── Diagnostic: token shape ──
+        console.log('[JoinPage] token length:', token?.length, 'trimmed:', token?.trim())
 
-        // Query by token only (no team_id filter, no status filter)
-        // Use nested select to get team data in one round trip
+        // ── Diagnostic 1: can the anon client read the table at all? ──
+        const { data: anyInvite, error: anyInviteError } = await anonClient
+          .from('team_invites')
+          .select('id, token')
+          .limit(1)
+        console.log('[JoinPage] any invite exists:', anyInvite, anyInviteError)
+
+        // ── Diagnostic 2: raw query, no .single() / .maybeSingle() ──
+        const { data: inviteRaw, error: inviteRawError } = await anonClient
+          .from('team_invites')
+          .select('*')
+          .eq('token', token)
+        console.log('[JoinPage] raw invite query (no single):', inviteRaw, inviteRawError)
+
+        // ── Diagnostic 3: simple maybeSingle with no nested join ──
+        const { data: inviteSimple, error: inviteSimpleError } = await anonClient
+          .from('team_invites')
+          .select('id, token, team_id, status')
+          .eq('token', token)
+          .maybeSingle()
+        console.log('[JoinPage] simple invite:', inviteSimple, inviteSimpleError)
+
+        // ── Main query: token + nested team join ──
+        console.log('[JoinPage] --- main team_invites query ---')
         const { data: invite, error: inviteErr } = await anonClient
           .from('team_invites')
           .select('team_id, status, teams(id, name, level, zip_code, bio, logo_url)')
