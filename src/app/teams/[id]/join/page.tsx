@@ -44,13 +44,11 @@ function JoinPageInner() {
   const searchParams = useSearchParams()
   const router = useRouter()
 
-  const teamId = params.id as string
-  const token = searchParams.get('token')
+  const teamId = params?.id as string
+  const token = searchParams?.get('token') ?? null
 
-  // Log immediately when component renders
-  console.log('[JoinPage] *** COMPONENT RENDERED ***')
-  console.log('[JoinPage] token from URL:', token)
-  console.log('[JoinPage] teamId from URL:', teamId)
+  // Log on every render so we can see what values are available
+  console.log('[JoinPage] values at render:', { teamId, token })
 
   const [userId, setUserId] = useState<string | null>(null)
   const [sessionLoading, setSessionLoading] = useState(true)
@@ -82,16 +80,20 @@ function JoinPageInner() {
   }, [])
 
   // ── Token + team validation — runs immediately, independent of auth ──
+  // Dep array is [token, teamId] only — no auth state, no user check
   useEffect(() => {
-    console.log('[JoinPage] validate effect running')
-    console.log('[JoinPage] token:', token)
+    // This must be the very first log — if you don't see it, the effect isn't firing at all
+    console.log('[JoinPage] useEffect fired, token:', token, 'teamId:', teamId)
 
     if (!token) {
-      console.log('[JoinPage] no token present — marking invalid')
+      // token is null — either missing from URL or useSearchParams hasn't resolved yet
+      console.log('[JoinPage] token is null/empty — NOT calling validate(). Marking invalid.')
       setTokenValid(false)
       setTeamLoading(false)
       return
     }
+
+    console.log('[JoinPage] token present, calling validate()')
 
     async function validate() {
       try {
