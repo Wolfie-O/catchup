@@ -208,6 +208,8 @@ export default function TeamDetailPage() {
   const [inviteToken, setInviteToken]     = useState<string | null>(null)
   const [inviteTokenLoading, setInviteTokenLoading] = useState(false)
   const [copied, setCopied]               = useState(false)
+  const [inviteEmails, setInviteEmails]   = useState('')
+  const [emailInviteSending, setEmailInviteSending] = useState(false)
 
   // ── Settings state ─────────────────────────────────────────────────────────
   const [setName, setSetName]     = useState('')
@@ -534,6 +536,41 @@ export default function TeamDetailPage() {
     setCopied(true)
     showToast('Link copied!')
     setTimeout(() => setCopied(false), 2000)
+  }
+
+  async function sendEmailInvites() {
+    if (!userId || !teamId || !inviteEmails.trim()) return
+    setEmailInviteSending(true)
+
+    const emails = inviteEmails
+      .split(/[\n,]+/)
+      .map(e => e.trim().toLowerCase())
+      .filter(e => e.includes('@') && e.includes('.'))
+
+    if (emails.length === 0) {
+      showToast('No valid email addresses found.', false)
+      setEmailInviteSending(false)
+      return
+    }
+
+    const rows = emails.map(email => ({
+      team_id: teamId,
+      email,
+      invited_by: userId,
+      token: crypto.randomUUID(),
+      status: 'pending',
+    }))
+
+    const { error } = await supabase.from('team_invites').insert(rows)
+
+    if (!error) {
+      showToast(`Invites sent to ${emails.length} player${emails.length !== 1 ? 's' : ''}!`)
+      setInviteEmails('')
+    } else {
+      showToast('Failed to send invites.', false)
+    }
+
+    setEmailInviteSending(false)
   }
 
   // ── Settings ───────────────────────────────────────────────────────────────
@@ -1044,6 +1081,40 @@ export default function TeamDetailPage() {
                       {inviteTokenLoading ? 'Generating…' : 'Generate Invite Link'}
                     </button>
                   )}
+                </div>
+              )}
+
+              {/* Email invite (admin only) */}
+              {isAdmin && (
+                <div style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(196,130,42,0.2)', borderRadius: '12px', padding: '18px' }}>
+                  <h3 style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: '18px', letterSpacing: '0.05em', margin: '0 0 8px', color: '#f5edd6' }}>
+                    Invite by <span style={{ color: '#c4822a' }}>Email</span>
+                  </h3>
+                  <p style={{ margin: '0 0 12px', fontSize: '13px', color: 'rgba(245,237,214,0.5)', fontFamily: "'Barlow', sans-serif" }}>
+                    Enter email addresses below. Invites will be saved and sent once email is configured.
+                  </p>
+                  <textarea
+                    value={inviteEmails}
+                    onChange={e => setInviteEmails(e.target.value)}
+                    placeholder={'Enter email addresses, one per line or comma separated'}
+                    rows={4}
+                    style={{ ...INPUT, resize: 'vertical', lineHeight: '1.5', marginBottom: '10px' } as React.CSSProperties}
+                    onFocus={onFocus} onBlur={onBlur}
+                  />
+                  <button
+                    onClick={sendEmailInvites}
+                    disabled={emailInviteSending || !inviteEmails.trim()}
+                    style={{
+                      padding: '9px 18px', borderRadius: '7px', border: 'none',
+                      background: emailInviteSending || !inviteEmails.trim() ? 'rgba(196,130,42,0.4)' : '#c4822a',
+                      color: '#0d1f3c', fontFamily: "'Barlow Condensed', sans-serif",
+                      fontWeight: 700, fontSize: '12px', letterSpacing: '0.08em',
+                      textTransform: 'uppercase',
+                      cursor: emailInviteSending || !inviteEmails.trim() ? 'not-allowed' : 'pointer',
+                    }}
+                  >
+                    {emailInviteSending ? 'Saving…' : 'Send Invites'}
+                  </button>
                 </div>
               )}
             </div>

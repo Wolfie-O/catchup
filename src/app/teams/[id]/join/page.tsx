@@ -16,7 +16,7 @@ function TeamLogo({ name, logoUrl, size = 80 }: { name: string; logoUrl: string 
     <div style={{
       width: size, height: size, borderRadius: '50%', background: '#c4822a',
       display: 'flex', alignItems: 'center', justifyContent: 'center',
-      fontFamily: "'Bebas Neue', sans-serif", fontSize: size * 0.36, color: '#0d1f3c', letterSpacing: '0.04em',
+      fontFamily: "'Bebas Neue', sans-serif", fontSize: Math.round(size * 0.36), color: '#0d1f3c', letterSpacing: '0.04em',
     }}>
       {getInitials(name)}
     </div>
@@ -37,77 +37,76 @@ export default function JoinTeamPage() {
   const [sessionLoading, setSessionLoading] = useState(true)
 
   const [team, setTeam] = useState<Team | null>(null)
-  const [tokenValid, setTokenValid] = useState<boolean | null>(null) // null = checking
+  const [memberCount, setMemberCount] = useState(0)
+  const [tokenValid, setTokenValid] = useState<boolean | null>(null)
   const [alreadyMember, setAlreadyMember] = useState(false)
   const [joining, setJoining] = useState(false)
   const [joined, setJoined] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  // Auth check
+  // Auth check — do NOT redirect if not logged in, just track the state
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
-      if (!session) {
-        router.push(`/auth?tab=login&redirect=/teams/${teamId}/join${token ? `?token=${token}` : ''}`)
-        return
-      }
-      setUserId(session.user.id)
+      setUserId(session?.user.id ?? null)
       setSessionLoading(false)
     })
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, session) => {
-      if (!session) router.push('/auth?tab=login')
+      setUserId(session?.user.id ?? null)
     })
     return () => subscription.unsubscribe()
-  }, [router, teamId, token])
+  }, [])
 
-  // Validate token and load team
+  // Validate token + load team info once auth check is complete
   useEffect(() => {
-    if (!userId || !token) return
+    if (sessionLoading) return
+
+    if (!token) {
+      setTokenValid(false)
+      return
+    }
 
     async function validate() {
-      // Check token
-      const { data: invite, error: inviteErr } = await supabase
+      const { data: invite } = await supabase
         .from('team_invites')
         .select('team_id')
         .eq('token', token)
         .eq('team_id', teamId)
         .single()
 
-      if (inviteErr || !invite) {
+      if (!invite) {
         setTokenValid(false)
         return
       }
 
       setTokenValid(true)
 
-      // Load team info
-      const { data: teamData } = await supabase
-        .from('teams')
-        .select('id, name, level, zip_code, bio, logo_url')
-        .eq('id', teamId)
-        .single()
+      const [teamRes, countRes] = await Promise.all([
+        supabase.from('teams').select('id, name, level, zip_code, bio, logo_url').eq('id', teamId).single(),
+        supabase.from('team_members').select('id', { count: 'exact', head: true }).eq('team_id', teamId).eq('status', 'active'),
+      ])
 
-      if (teamData) setTeam(teamData)
+      if (teamRes.data) setTeam(teamRes.data as Team)
+      setMemberCount(countRes.count ?? 0)
 
-      // Check if already a member
-      const { data: existing } = await supabase
-        .from('team_members')
-        .select('id, status')
-        .eq('team_id', teamId)
-        .eq('user_id', userId)
-        .single()
-
-      if (existing) setAlreadyMember(true)
+      if (userId) {
+        const { data: existing } = await supabase
+          .from('team_members')
+          .select('id')
+          .eq('team_id', teamId)
+          .eq('user_id', userId)
+          .maybeSingle()
+        if (existing) setAlreadyMember(true)
+      }
     }
 
     validate()
-  }, [userId, token, teamId])
+  }, [sessionLoading, token, teamId, userId])
 
   async function handleAccept() {
     if (!userId || !team) return
     setJoining(true)
     setError(null)
 
-    // Upsert member record with active status
     const { error: insertErr } = await supabase
       .from('team_members')
       .upsert(
@@ -121,11 +120,24 @@ export default function JoinTeamPage() {
       return
     }
 
+    // Mark invite as accepted
+    await supabase.from('team_invites').update({ status: 'accepted' }).eq('token', token!)
+
     setJoined(true)
     setTimeout(() => router.push(`/teams/${team.id}`), 1800)
   }
 
-  // --- Loading states ---
+  const redirectParam = encodeURIComponent(`/teams/${teamId}/join?token=${token ?? ''}`)
+
+  const authBtnBase: React.CSSProperties = {
+    display: 'block', width: '100%', padding: '13px', borderRadius: '9px',
+    fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700,
+    letterSpacing: '0.1em', textTransform: 'uppercase', fontSize: '15px',
+    textDecoration: 'none', textAlign: 'center', cursor: 'pointer',
+    transition: 'background 0.15s',
+  }
+
+  // Loading
   if (sessionLoading || tokenValid === null) {
     return (
       <div style={{ minHeight: '100vh', background: '#0d1f3c', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -147,7 +159,7 @@ export default function JoinTeamPage() {
 
       <main style={{ maxWidth: '480px', margin: '0 auto', padding: '60px 16px 80px', textAlign: 'center' }}>
 
-        {/* Invalid token */}
+        {/* ── Invalid token ── */}
         {!tokenValid && (
           <>
             <div style={{ fontSize: '48px', marginBottom: '16px' }}>⚠️</div>
@@ -168,7 +180,7 @@ export default function JoinTeamPage() {
           </>
         )}
 
-        {/* Valid token, team loaded */}
+        {/* ── Valid token ── */}
         {tokenValid && team && (
           <>
             {/* Team logo */}
@@ -176,22 +188,67 @@ export default function JoinTeamPage() {
               <TeamLogo name={team.name} logoUrl={team.logo_url} size={96} />
             </div>
 
-            {joined ? (
+            {/* Team name + meta */}
+            <h1 style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: '42px', letterSpacing: '0.05em', margin: '0 0 6px', lineHeight: 1 }}>
+              {team.name}
+            </h1>
+            {(team.level || memberCount > 0) && (
+              <p style={{ fontSize: '14px', color: 'rgba(245,237,214,0.45)', margin: '0 0 16px' }}>
+                {[team.level, `${memberCount} member${memberCount !== 1 ? 's' : ''}`].filter(Boolean).join(' · ')}
+              </p>
+            )}
+            {team.bio && (
+              <p style={{
+                fontSize: '14px', color: 'rgba(245,237,214,0.65)', margin: '0 0 28px',
+                lineHeight: 1.6, background: 'rgba(255,255,255,0.04)',
+                borderRadius: '10px', padding: '12px 16px', textAlign: 'left',
+              }}>
+                {team.bio}
+              </p>
+            )}
+            {!team.bio && <div style={{ marginBottom: '24px' }} />}
+
+            {/* ── NOT LOGGED IN ── */}
+            {!userId && (
               <>
-                <h1 style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: '38px', letterSpacing: '0.05em', margin: '0 0 10px' }}>
+                <p style={{ fontSize: '16px', color: 'rgba(245,237,214,0.75)', margin: '0 0 28px', lineHeight: 1.6 }}>
+                  You&apos;ve been invited to join <strong style={{ color: '#f5edd6' }}>{team.name}</strong> on CatchUp.
+                  Create an account or log in to accept.
+                </p>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <Link
+                    href={`/auth?tab=signup&redirect=${redirectParam}`}
+                    style={{ ...authBtnBase, background: '#c4822a', color: '#0d1f3c' }}
+                  >
+                    Sign Up &amp; Join
+                  </Link>
+                  <Link
+                    href={`/auth?tab=login&redirect=${redirectParam}`}
+                    style={{ ...authBtnBase, background: 'transparent', color: '#c4822a', border: '1px solid rgba(196,130,42,0.5)' }}
+                  >
+                    Log In &amp; Join
+                  </Link>
+                </div>
+              </>
+            )}
+
+            {/* ── LOGGED IN — joined ── */}
+            {userId && joined && (
+              <>
+                <h2 style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: '38px', letterSpacing: '0.05em', margin: '0 0 10px' }}>
                   You&apos;re <span style={{ color: '#c4822a' }}>In!</span>
-                </h1>
+                </h2>
                 <p style={{ fontSize: '15px', color: 'rgba(245,237,214,0.6)', margin: 0 }}>
                   Taking you to the team page…
                 </p>
               </>
-            ) : alreadyMember ? (
+            )}
+
+            {/* ── LOGGED IN — already a member ── */}
+            {userId && !joined && alreadyMember && (
               <>
-                <h1 style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: '36px', letterSpacing: '0.05em', margin: '0 0 10px' }}>
-                  Already a <span style={{ color: '#c4822a' }}>Member</span>
-                </h1>
-                <p style={{ fontSize: '15px', color: 'rgba(245,237,214,0.55)', margin: '0 0 28px' }}>
-                  You&apos;re already on {team.name}.
+                <p style={{ fontSize: '15px', color: 'rgba(245,237,214,0.55)', margin: '0 0 24px' }}>
+                  You&apos;re already a member of {team.name}.
                 </p>
                 <Link href={`/teams/${team.id}`} style={{
                   display: 'inline-block', padding: '11px 28px', borderRadius: '8px',
@@ -202,37 +259,17 @@ export default function JoinTeamPage() {
                   Go to Team Page
                 </Link>
               </>
-            ) : (
+            )}
+
+            {/* ── LOGGED IN — accept invitation ── */}
+            {userId && !joined && !alreadyMember && (
               <>
-                <p style={{ fontSize: '13px', fontFamily: "'Barlow Condensed', sans-serif", letterSpacing: '0.1em', textTransform: 'uppercase', color: 'rgba(245,237,214,0.45)', margin: '0 0 6px' }}>
-                  You&apos;ve been invited to join
+                <p style={{ fontSize: '14px', color: 'rgba(245,237,214,0.5)', margin: '0 0 24px' }}>
+                  You&apos;ve been invited to join as a player.
                 </p>
-                <h1 style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: '42px', letterSpacing: '0.05em', margin: '0 0 6px' }}>
-                  {team.name}
-                </h1>
-
-                {(team.level || team.zip_code) && (
-                  <p style={{ fontSize: '14px', color: 'rgba(245,237,214,0.45)', margin: '0 0 16px' }}>
-                    {[team.level, team.zip_code].filter(Boolean).join(' · ')}
-                  </p>
-                )}
-
-                {team.bio && (
-                  <p style={{
-                    fontSize: '15px', color: 'rgba(245,237,214,0.65)', margin: '0 0 32px',
-                    lineHeight: 1.6, background: 'rgba(255,255,255,0.04)',
-                    borderRadius: '10px', padding: '14px 18px', textAlign: 'left',
-                  }}>
-                    {team.bio}
-                  </p>
-                )}
-
-                {!team.bio && <div style={{ marginBottom: '32px' }} />}
-
                 {error && (
                   <p style={{ color: '#fc8181', fontSize: '14px', margin: '0 0 16px' }}>{error}</p>
                 )}
-
                 <button
                   onClick={handleAccept}
                   disabled={joining}
@@ -247,7 +284,6 @@ export default function JoinTeamPage() {
                 >
                   {joining ? 'Joining…' : 'Accept Invitation'}
                 </button>
-
                 <Link href="/teams" style={{
                   display: 'block', marginTop: '14px', fontSize: '13px',
                   color: 'rgba(245,237,214,0.35)', textDecoration: 'none',

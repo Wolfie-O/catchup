@@ -9,6 +9,7 @@ type Tab = 'signup' | 'login'
 function AuthForm() {
   const router = useRouter()
   const params = useSearchParams()
+  const redirectTo = params.get('redirect') ?? null
   const initialTab = params.get('tab') === 'login' ? 'login' : 'signup'
   const [tab, setTab] = useState<Tab>(initialTab)
   const [email, setEmail] = useState('')
@@ -50,14 +51,14 @@ function AuthForm() {
       if (error) {
         setError(error.message)
       } else {
-        router.push('/profile/setup')
+        router.push(redirectTo ?? '/profile/setup')
       }
     } else {
       const { error } = await supabase.auth.signInWithPassword({ email, password })
       if (error) {
         setError(error.message)
       } else {
-        router.push('/players')
+        router.push(redirectTo ?? '/players')
       }
     }
 
