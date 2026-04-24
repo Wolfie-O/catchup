@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useEffect, useRef, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 
 const POSITIONS = ['P', 'C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF', 'DH']
@@ -58,6 +58,7 @@ function blurBorder(e: React.FocusEvent<HTMLInputElement | HTMLTextAreaElement |
 
 export default function ProfileSetupPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const [avatarFile, setAvatarFile] = useState<File | null>(null)
@@ -176,11 +177,11 @@ export default function ProfileSetupPage() {
         setError(photoWarning)
         setLoading(false)
         // Still redirect — just give the user a moment to read the message
-        setTimeout(() => setRedirectTo('/players'), 2500)
+        setTimeout(() => setRedirectTo(searchParams?.get('redirect') ?? '/players'), 2500)
         return
       }
 
-      setRedirectTo('/players')
+      setRedirectTo(searchParams?.get('redirect') ?? '/players')
     } catch {
       setError('Something went wrong. Please try again.')
       setLoading(false)

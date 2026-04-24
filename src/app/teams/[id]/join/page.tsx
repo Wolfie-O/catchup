@@ -173,7 +173,10 @@ function JoinPageInner() {
     setTimeout(() => router.push(`/teams/${team.id}`), 1800)
   }
 
-  const redirectParam = encodeURIComponent(`/teams/${teamId}/join?token=${token ?? ''}`)
+  const joinUrl = `/teams/${teamId}/join?token=${token ?? ''}`
+  const setupUrl = `/profile/setup?redirect=${encodeURIComponent(joinUrl)}`
+  const signupUrl = `/auth?tab=signup&redirect=${encodeURIComponent(setupUrl)}`
+  const redirectParam = encodeURIComponent(joinUrl)
 
   const authBtnBase: React.CSSProperties = {
     display: 'block', width: '100%', padding: '13px', borderRadius: '9px',
@@ -264,7 +267,7 @@ function JoinPageInner() {
                       Create an account or log in to accept.
                     </p>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                      <Link href={`/auth?tab=signup&redirect=${redirectParam}`} style={{ ...authBtnBase, background: '#c4822a', color: '#0d1f3c' }}>
+                      <Link href={signupUrl} style={{ ...authBtnBase, background: '#c4822a', color: '#0d1f3c' }}>
                         Sign Up &amp; Join
                       </Link>
                       <Link href={`/auth?tab=login&redirect=${redirectParam}`} style={{ ...authBtnBase, background: 'transparent', color: '#c4822a', border: '1px solid rgba(196,130,42,0.5)' }}>
