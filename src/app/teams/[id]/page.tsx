@@ -61,7 +61,27 @@ type ScheduleEvent = {
   notes: string | null
 }
 
-type Tab = 'feed' | 'schedule' | 'roster' | 'settings'
+type Tab = 'feed' | 'schedule' | 'roster' | 'settings' | 'coaches_room'
+
+type CoachChatMessage = {
+  id: string
+  user_id: string
+  content: string
+  created_at: string
+  authorName: string
+  authorAvatar: string | null
+}
+
+type CoachPost = {
+  id: string
+  user_id: string
+  title: string | null
+  content: string
+  post_type: 'note' | 'practice_plan'
+  is_pinned: boolean
+  created_at: string
+  authorName: string
+}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -185,6 +205,7 @@ export default function TeamDetailPage() {
   const [newPostImagePreview, setNewPostImagePreview] = useState<string | null>(null)
   const [postSubmitting, setPostSubmitting] = useState(false)
   const feedImageRef = useRef<HTMLInputElement>(null)
+  const chatEndRef = useRef<HTMLDivElement>(null)
 
   // ── Schedule state ─────────────────────────────────────────────────────────
   const [events, setEvents]             = useState<ScheduleEvent[]>([])
@@ -223,6 +244,21 @@ export default function TeamDetailPage() {
   const [disbanding, setDisbanding] = useState(false)
   const [transferTo, setTransferTo] = useState('')
   const settingsLogoRef = useRef<HTMLInputElement>(null)
+
+  // ── Coaches Room state ─────────────────────────────────────────────────────
+  const [chatMessages, setChatMessages] = useState<CoachChatMessage[]>([])
+  const [chatLoading, setChatLoading] = useState(false)
+  const [chatLoaded, setChatLoaded] = useState(false)
+  const [chatInput, setChatInput] = useState('')
+  const [chatSending, setChatSending] = useState(false)
+  const [coachPosts, setCoachPosts] = useState<CoachPost[]>([])
+  const [coachPostsLoaded, setCoachPostsLoaded] = useState(false)
+  const [showNewCoachPost, setShowNewCoachPost] = useState(false)
+  const [cpTitle, setCpTitle] = useState('')
+  const [cpContent, setCpContent] = useState('')
+  const [cpType, setCpType] = useState<'note' | 'practice_plan'>('note')
+  const [cpPinned, setCpPinned] = useState(false)
+  const [cpSubmitting, setCpSubmitting] = useState(false)
 
   // ── Toast ──────────────────────────────────────────────────────────────────
   const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null)
@@ -487,6 +523,136 @@ export default function TeamDetailPage() {
   useEffect(() => {
     if (activeTab === 'roster' && myMembership?.status === 'active') loadRoster()
   }, [activeTab, myMembership, loadRoster])
+
+  // ── Coaches Room ────────────────────────────────────────────────────────────
+  const loadCoachesRoom = useCallback(async () => {
+    if (!userId || !teamId || chatLoaded) return
+    setChatLoading(true)
+
+    const [msgRes, postRes] = await Promise.all([
+      supabase
+        .from('coaches_room_messages')
+        .select('id, user_id, content, created_at')
+        .eq('team_id', teamId)
+        .order('created_at', { ascending: true })
+        .limit(200),
+      supabase
+        .from('coaches_room_posts')
+        .select('id, user_id, title, content, post_type, is_pinned, created_at')
+        .eq('team_id', teamId)
+        .order('created_at', { ascending: false }),
+    ])
+
+    const rawMsgs = (msgRes.data ?? []) as { id: string; user_id: string; content: string; created_at: string }[]
+    const rawPosts = (postRes.data ?? []) as { id: string; user_id: string; title: string | null; content: string; post_type: string; is_pinned: boolean; created_at: string }[]
+
+    const allUserIds = [...new Set([...rawMsgs.map(m => m.user_id), ...rawPosts.map(p => p.user_id)])]
+    const profileMap: Record<string, { first_name: string | null; last_name: string | null; avatar_url: string | null }> = {}
+    if (allUserIds.length > 0) {
+      const { data: profiles } = await supabase
+        .from('profiles').select('id, first_name, last_name, avatar_url').in('id', allUserIds)
+      for (const p of (profiles ?? []) as { id: string; first_name: string | null; last_name: string | null; avatar_url: string | null }[]) {
+        profileMap[p.id] = p
+      }
+    }
+
+    setChatMessages(rawMsgs.map(m => {
+      const a = profileMap[m.user_id]
+      return { ...m, authorName: a ? [a.first_name, a.last_name].filter(Boolean).join(' ') || 'Coach' : 'Coach', authorAvatar: a?.avatar_url ?? null }
+    }))
+
+    const sorted = rawPosts
+      .map(p => {
+        const a = profileMap[p.user_id]
+        return { ...p, post_type: p.post_type as 'note' | 'practice_plan', authorName: a ? [a.first_name, a.last_name].filter(Boolean).join(' ') || 'Coach' : 'Coach' }
+      })
+      .sort((a, b) => {
+        if (a.is_pinned && !b.is_pinned) return -1
+        if (!a.is_pinned && b.is_pinned) return 1
+        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      })
+    setCoachPosts(sorted)
+    setChatLoading(false)
+    setChatLoaded(true)
+    setCoachPostsLoaded(true)
+  }, [userId, teamId, chatLoaded])
+
+  useEffect(() => {
+    const isStaff = myMembership?.role === 'admin' || myMembership?.role === 'coach'
+    if (activeTab === 'coaches_room' && isStaff && myMembership?.status === 'active') loadCoachesRoom()
+  }, [activeTab, myMembership, loadCoachesRoom])
+
+  // Auto-scroll chat to bottom on new messages
+  useEffect(() => {
+    if (activeTab === 'coaches_room') chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [chatMessages, activeTab])
+
+  // Realtime chat subscription — activates once initial load is done
+  useEffect(() => {
+    if (!teamId || !chatLoaded) return
+    const channel = supabase
+      .channel(`coaches_chat_${teamId}`)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'coaches_room_messages', filter: `team_id=eq.${teamId}` },
+        async (payload) => {
+          const row = payload.new as { id: string; user_id: string; content: string; created_at: string }
+          const { data: prof } = await supabase.from('profiles').select('first_name, last_name, avatar_url').eq('id', row.user_id).maybeSingle()
+          const p = prof as { first_name: string | null; last_name: string | null; avatar_url: string | null } | null
+          setChatMessages(prev => {
+            if (prev.some(m => m.id === row.id)) return prev
+            return [...prev, { ...row, authorName: p ? [p.first_name, p.last_name].filter(Boolean).join(' ') || 'Coach' : 'Coach', authorAvatar: p?.avatar_url ?? null }]
+          })
+        })
+      .subscribe()
+    return () => { supabase.removeChannel(channel) }
+  }, [teamId, chatLoaded])
+
+  async function sendChatMessage() {
+    if (!userId || !chatInput.trim() || chatSending) return
+    setChatSending(true)
+    const content = chatInput.trim()
+    setChatInput('')
+    await supabase.from('coaches_room_messages').insert({ team_id: teamId, user_id: userId, content })
+    setChatSending(false)
+  }
+
+  async function submitCoachPost() {
+    if (!userId || !cpContent.trim() || cpSubmitting) return
+    setCpSubmitting(true)
+    const { data, error } = await supabase
+      .from('coaches_room_posts')
+      .insert({ team_id: teamId, user_id: userId, title: cpTitle.trim() || null, content: cpContent.trim(), post_type: cpType, is_pinned: cpPinned })
+      .select('id, user_id, title, content, post_type, is_pinned, created_at')
+      .single()
+    if (!error && data) {
+      const { data: prof } = await supabase.from('profiles').select('first_name, last_name').eq('id', userId).maybeSingle()
+      const p = prof as { first_name: string | null; last_name: string | null } | null
+      const newPost: CoachPost = {
+        ...(data as { id: string; user_id: string; title: string | null; content: string; post_type: string; is_pinned: boolean; created_at: string }),
+        post_type: cpType,
+        authorName: p ? [p.first_name, p.last_name].filter(Boolean).join(' ') || 'Coach' : 'Coach',
+      }
+      setCoachPosts(prev => {
+        const updated = [newPost, ...prev]
+        return updated.sort((a, b) => {
+          if (a.is_pinned && !b.is_pinned) return -1
+          if (!a.is_pinned && b.is_pinned) return 1
+          return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+        })
+      })
+      setCpTitle(''); setCpContent(''); setCpType('note'); setCpPinned(false)
+      setShowNewCoachPost(false)
+      showToast('Note posted!')
+    } else {
+      showToast('Failed to post.', false)
+    }
+    setCpSubmitting(false)
+  }
+
+  async function deleteCoachPost(postId: string) {
+    await supabase.from('coaches_room_posts').delete().eq('id', postId)
+    setCoachPosts(prev => prev.filter(p => p.id !== postId))
+    showToast('Note deleted.')
+  }
 
   async function updateMemberRole(memberId: string, newRole: 'admin' | 'coach' | 'player') {
     await supabase.from('team_members').update({ role: newRole }).eq('id', memberId)
@@ -756,21 +922,27 @@ export default function TeamDetailPage() {
 
           {/* Tab bar */}
           <div style={{ display: 'flex', gap: '2px', marginBottom: '24px', borderBottom: '1px solid rgba(196,130,42,0.2)', overflowX: 'auto' }}>
-            {(['feed', 'schedule', 'roster', ...(isAdmin ? ['settings'] : [])] as Tab[]).map(tab => (
+            {([
+              { key: 'feed' as Tab, label: 'Feed' },
+              { key: 'schedule' as Tab, label: 'Schedule' },
+              { key: 'roster' as Tab, label: 'Roster' },
+              ...(canManage ? [{ key: 'coaches_room' as Tab, label: '🔒 Coaches Room' }] : []),
+              ...(isAdmin ? [{ key: 'settings' as Tab, label: 'Settings' }] : []),
+            ]).map(({ key, label }) => (
               <button
-                key={tab}
-                onClick={() => setActiveTab(tab)}
+                key={key}
+                onClick={() => setActiveTab(key)}
                 style={{
                   padding: '10px 18px', background: 'none', border: 'none', cursor: 'pointer',
                   fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: '13px',
                   letterSpacing: '0.08em', textTransform: 'uppercase', whiteSpace: 'nowrap',
-                  borderBottom: activeTab === tab ? '2px solid #c4822a' : '2px solid transparent',
-                  color: activeTab === tab ? '#c4822a' : 'rgba(245,237,214,0.5)',
+                  borderBottom: activeTab === key ? '2px solid #c4822a' : '2px solid transparent',
+                  color: activeTab === key ? '#c4822a' : 'rgba(245,237,214,0.5)',
                   transition: 'color 0.15s',
                   marginBottom: '-1px',
                 }}
               >
-                {tab.charAt(0).toUpperCase() + tab.slice(1)}
+                {label}
               </button>
             ))}
           </div>
@@ -1117,6 +1289,178 @@ export default function TeamDetailPage() {
                   </button>
                 </div>
               )}
+            </div>
+          )}
+
+          {/* ── COACHES ROOM TAB ── */}
+          {activeTab === 'coaches_room' && canManage && (
+            <div style={{ display: 'flex', gap: '20px', alignItems: 'flex-start', flexWrap: 'wrap' }}>
+
+              {/* LEFT: Chat (60%) */}
+              <div style={{ flex: '3 1 340px', minWidth: 0 }}>
+                <h2 style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: '22px', letterSpacing: '0.05em', margin: '0 0 14px', color: '#f5edd6' }}>
+                  Staff <span style={{ color: '#c4822a' }}>Chat</span>
+                </h2>
+                <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(196,130,42,0.2)', borderRadius: '12px', display: 'flex', flexDirection: 'column', height: '480px' }}>
+                  {/* Messages */}
+                  <div style={{ flex: 1, overflowY: 'auto', padding: '14px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    {chatLoading ? (
+                      <div style={{ display: 'flex', justifyContent: 'center', padding: '32px 0' }}>
+                        <div style={{ width: 24, height: 24, borderRadius: '50%', border: '2px solid rgba(196,130,42,0.2)', borderTopColor: '#c4822a', animation: 'spin 0.7s linear infinite' }} />
+                      </div>
+                    ) : chatMessages.length === 0 ? (
+                      <p style={{ textAlign: 'center', color: 'rgba(245,237,214,0.3)', fontSize: '13px', margin: 'auto 0', fontFamily: "'Barlow', sans-serif" }}>
+                        No messages yet — start the conversation
+                      </p>
+                    ) : chatMessages.map(msg => (
+                      <div key={msg.id} style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
+                        <PersonAvatar url={msg.authorAvatar} first={msg.authorName.split(' ')[0] ?? null} last={msg.authorName.split(' ')[1] ?? null} size={30} />
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ display: 'flex', gap: '6px', alignItems: 'baseline', marginBottom: '3px' }}>
+                            <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: '13px', color: msg.user_id === userId ? '#c4822a' : '#f5edd6' }}>
+                              {msg.user_id === userId ? 'You' : msg.authorName}
+                            </span>
+                            <span style={{ fontSize: '10px', color: 'rgba(245,237,214,0.3)', fontFamily: "'Barlow', sans-serif" }}>{timeAgo(msg.created_at)}</span>
+                          </div>
+                          <p style={{ margin: 0, fontSize: '13px', lineHeight: '1.5', color: 'rgba(245,237,214,0.85)', fontFamily: "'Barlow', sans-serif", wordBreak: 'break-word', whiteSpace: 'pre-wrap' }}>
+                            {msg.content}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                    <div ref={chatEndRef} />
+                  </div>
+                  {/* Input */}
+                  <div style={{ borderTop: '1px solid rgba(196,130,42,0.15)', padding: '10px 12px', display: 'flex', gap: '8px' }}>
+                    <input
+                      type="text"
+                      value={chatInput}
+                      onChange={e => setChatInput(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChatMessage() } }}
+                      placeholder="Message staff…"
+                      style={{ ...INPUT, flex: 1, padding: '8px 10px' }}
+                      onFocus={onFocus} onBlur={onBlur}
+                    />
+                    <button
+                      onClick={sendChatMessage}
+                      disabled={chatSending || !chatInput.trim()}
+                      style={{
+                        padding: '8px 14px', borderRadius: '7px', border: 'none',
+                        background: chatSending || !chatInput.trim() ? 'rgba(196,130,42,0.4)' : '#c4822a',
+                        color: '#0d1f3c', fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700,
+                        fontSize: '12px', letterSpacing: '0.06em', cursor: chatSending || !chatInput.trim() ? 'not-allowed' : 'pointer',
+                      }}
+                    >
+                      Send
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* RIGHT: Posts (40%) */}
+              <div style={{ flex: '2 1 240px', minWidth: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
+                  <h2 style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: '22px', letterSpacing: '0.05em', margin: 0, color: '#f5edd6' }}>
+                    Notes & <span style={{ color: '#c4822a' }}>Plans</span>
+                  </h2>
+                  <button
+                    onClick={() => setShowNewCoachPost(v => !v)}
+                    style={{ padding: '5px 12px', borderRadius: '6px', border: '1px solid rgba(196,130,42,0.4)', background: 'transparent', color: '#c4822a', fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: '12px', letterSpacing: '0.06em', cursor: 'pointer' }}
+                  >
+                    {showNewCoachPost ? 'Cancel' : '+ New'}
+                  </button>
+                </div>
+
+                {/* New post form */}
+                {showNewCoachPost && (
+                  <div style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(196,130,42,0.2)', borderRadius: '10px', padding: '14px', marginBottom: '14px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    <input
+                      type="text"
+                      value={cpTitle}
+                      onChange={e => setCpTitle(e.target.value)}
+                      placeholder="Title (optional)"
+                      style={{ ...INPUT, padding: '7px 10px' }}
+                      onFocus={onFocus} onBlur={onBlur}
+                    />
+                    <textarea
+                      value={cpContent}
+                      onChange={e => setCpContent(e.target.value)}
+                      placeholder="Write a note or practice plan…"
+                      rows={4}
+                      style={{ ...INPUT, resize: 'vertical', lineHeight: '1.5' } as React.CSSProperties}
+                      onFocus={onFocus} onBlur={onBlur}
+                    />
+                    <div style={{ display: 'flex', gap: '6px' }}>
+                      {(['note', 'practice_plan'] as const).map(t => (
+                        <button
+                          key={t}
+                          onClick={() => setCpType(t)}
+                          style={{ flex: 1, padding: '6px', borderRadius: '6px', cursor: 'pointer', fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: '11px', letterSpacing: '0.06em', border: cpType === t ? '1px solid #c4822a' : '1px solid rgba(245,237,214,0.18)', background: cpType === t ? 'rgba(196,130,42,0.15)' : 'transparent', color: cpType === t ? '#c4822a' : 'rgba(245,237,214,0.5)' }}
+                        >
+                          {t === 'note' ? 'Note' : 'Practice Plan'}
+                        </button>
+                      ))}
+                    </div>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '12px', fontFamily: "'Barlow Condensed', sans-serif", color: 'rgba(245,237,214,0.6)' }}>
+                      <input type="checkbox" checked={cpPinned} onChange={e => setCpPinned(e.target.checked)} style={{ accentColor: '#c4822a' }} />
+                      Pin to top
+                    </label>
+                    <button
+                      onClick={submitCoachPost}
+                      disabled={cpSubmitting || !cpContent.trim()}
+                      style={{
+                        padding: '8px', borderRadius: '7px', border: 'none',
+                        background: cpSubmitting || !cpContent.trim() ? 'rgba(196,130,42,0.4)' : '#c4822a',
+                        color: '#0d1f3c', fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700,
+                        fontSize: '12px', letterSpacing: '0.08em', textTransform: 'uppercase',
+                        cursor: cpSubmitting || !cpContent.trim() ? 'not-allowed' : 'pointer',
+                      }}
+                    >
+                      {cpSubmitting ? '…' : 'Post'}
+                    </button>
+                  </div>
+                )}
+
+                {/* Posts list */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  {coachPostsLoaded && coachPosts.length === 0 ? (
+                    <p style={{ textAlign: 'center', color: 'rgba(245,237,214,0.3)', fontSize: '13px', padding: '32px 0', fontFamily: "'Barlow', sans-serif" }}>
+                      No notes yet — add a practice plan or note
+                    </p>
+                  ) : coachPosts.map(post => (
+                    <div key={post.id} style={{ background: 'rgba(255,255,255,0.04)', border: `1px solid ${post.is_pinned ? 'rgba(196,130,42,0.4)' : 'rgba(196,130,42,0.15)'}`, borderRadius: '10px', padding: '12px 14px' }}>
+                      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '8px', marginBottom: '6px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                          {post.is_pinned && <span style={{ fontSize: '12px' }}>📌</span>}
+                          <span style={{ fontSize: '10px', fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, letterSpacing: '0.06em', color: post.post_type === 'practice_plan' ? '#63b3ed' : 'rgba(245,237,214,0.5)', background: post.post_type === 'practice_plan' ? 'rgba(99,179,237,0.1)' : 'rgba(255,255,255,0.06)', border: `1px solid ${post.post_type === 'practice_plan' ? 'rgba(99,179,237,0.3)' : 'rgba(245,237,214,0.12)'}`, borderRadius: '4px', padding: '1px 6px' }}>
+                            {post.post_type === 'practice_plan' ? 'Practice Plan' : 'Note'}
+                          </span>
+                          {post.title && (
+                            <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: '14px', color: '#f5edd6' }}>{post.title}</span>
+                          )}
+                        </div>
+                        {post.user_id === userId && (
+                          <button
+                            onClick={() => deleteCoachPost(post.id)}
+                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(245,237,214,0.25)', fontSize: '14px', padding: '0 2px', flexShrink: 0 }}
+                            onMouseEnter={e => { e.currentTarget.style.color = '#fc8181' }}
+                            onMouseLeave={e => { e.currentTarget.style.color = 'rgba(245,237,214,0.25)' }}
+                          >
+                            🗑
+                          </button>
+                        )}
+                      </div>
+                      <p style={{ margin: '0 0 8px', fontSize: '13px', lineHeight: '1.55', color: 'rgba(245,237,214,0.75)', fontFamily: "'Barlow', sans-serif", whiteSpace: 'pre-wrap' }}>
+                        {post.content}
+                      </p>
+                      <div style={{ fontSize: '11px', color: 'rgba(245,237,214,0.3)', fontFamily: "'Barlow', sans-serif" }}>
+                        {post.authorName} · {timeAgo(post.created_at)}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
             </div>
           )}
 
