@@ -618,17 +618,17 @@ export default function ProfilePage() {
                       {profile.role && (
                         <div style={{ display: 'flex', gap: '6px', justifyContent: 'center', marginTop: '8px', flexWrap: 'wrap' }}>
                           {(profile.role === 'player' || profile.role === 'both') && (
-                            <span style={{ fontSize: '11px', fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, letterSpacing: '0.06em', color: '#63b3ed', background: 'rgba(99,179,237,0.12)', border: '1px solid rgba(99,179,237,0.35)', borderRadius: '4px', padding: '2px 8px' }}>
+                            <span style={{ padding: '4px 12px', borderRadius: '99px', fontSize: '12px', fontWeight: 700, fontFamily: "'Barlow Condensed', sans-serif", letterSpacing: '0.06em', textTransform: 'uppercase', background: '#1e3a5f', color: '#f5edd6' }}>
                               Player
                             </span>
                           )}
                           {(profile.role === 'coach' || profile.role === 'both') && (
-                            <span style={{ fontSize: '11px', fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, letterSpacing: '0.06em', color: '#c4822a', background: 'rgba(196,130,42,0.12)', border: '1px solid rgba(196,130,42,0.4)', borderRadius: '4px', padding: '2px 8px' }}>
+                            <span style={{ padding: '4px 12px', borderRadius: '99px', fontSize: '12px', fontWeight: 700, fontFamily: "'Barlow Condensed', sans-serif", letterSpacing: '0.06em', textTransform: 'uppercase', background: '#c4822a', color: '#0d1f3c' }}>
                               Coach
                             </span>
                           )}
                           {profile.role === 'parent' && (
-                            <span style={{ fontSize: '11px', fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, letterSpacing: '0.06em', color: '#68d391', background: 'rgba(104,211,145,0.12)', border: '1px solid rgba(104,211,145,0.35)', borderRadius: '4px', padding: '2px 8px' }}>
+                            <span style={{ padding: '4px 12px', borderRadius: '99px', fontSize: '12px', fontWeight: 700, fontFamily: "'Barlow Condensed', sans-serif", letterSpacing: '0.06em', textTransform: 'uppercase', background: '#1a5c3a', color: '#f5edd6' }}>
                               Parent
                             </span>
                           )}
@@ -656,9 +656,9 @@ export default function ProfilePage() {
 
                   {/* ── Player / Both fields ── */}
                   {(profile.role === 'player' || profile.role === 'both') && (
-                    <>
+                    <div style={{ marginBottom: '12px' }}>
                       {profile.positions && profile.positions.length > 0 && (
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', justifyContent: 'center', marginBottom: '10px' }}>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', justifyContent: 'center', marginBottom: '8px' }}>
                           {profile.positions.map(pos => (
                             <span key={pos} style={{
                               padding: '3px 12px', borderRadius: '99px', fontSize: '12px',
@@ -672,68 +672,84 @@ export default function ProfilePage() {
                         </div>
                       )}
                       {(profile.highest_level || profile.status) && (
-                        <p style={{ margin: '0 0 10px', fontSize: '13px', color: 'rgba(245,237,214,0.5)', fontFamily: "'Barlow', sans-serif", textAlign: 'center' }}>
+                        <p style={{ margin: '0 0 4px', fontSize: '13px', color: 'rgba(245,237,214,0.5)', fontFamily: "'Barlow', sans-serif", textAlign: 'center' }}>
                           {[profile.highest_level, profile.status].filter(Boolean).join(' · ')}
                         </p>
                       )}
-                    </>
+                    </div>
                   )}
 
                   {/* ── Coach / Both fields ── */}
                   {(profile.role === 'coach' || profile.role === 'both') && (
-                    <div style={{ marginBottom: '10px', textAlign: 'center' }}>
+                    <div style={{ marginBottom: '12px' }}>
+                      <div style={{ fontSize: '11px', fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, letterSpacing: '0.1em', color: 'rgba(245,237,214,0.35)', textTransform: 'uppercase', textAlign: 'center', marginBottom: '8px' }}>
+                        Coaching
+                      </div>
                       {profile.coaching_specialties && profile.coaching_specialties.length > 0 && (
-                        <div style={{ marginBottom: '8px' }}>
-                          <div style={{ fontSize: '11px', fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, letterSpacing: '0.08em', color: 'rgba(245,237,214,0.35)', textTransform: 'uppercase', marginBottom: '5px' }}>Specialties</div>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', justifyContent: 'center', marginBottom: '8px' }}>
+                          {profile.coaching_specialties.map(s => (
+                            <span key={s} style={{ padding: '3px 10px', borderRadius: '99px', fontSize: '12px', fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, letterSpacing: '0.06em', border: '1px solid rgba(196,130,42,0.35)', color: '#c4822a', background: 'rgba(196,130,42,0.08)' }}>
+                              {s}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                      {profile.coaching_experience && (
+                        <p style={{ margin: '0 0 6px', fontSize: '13px', color: 'rgba(245,237,214,0.5)', fontFamily: "'Barlow', sans-serif", textAlign: 'center' }}>
+                          {profile.coaching_experience} experience
+                        </p>
+                      )}
+                      {profile.coaching_offerings && profile.coaching_offerings.length > 0 && (
+                        <div style={{ marginBottom: '6px' }}>
+                          <div style={{ fontSize: '11px', fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, letterSpacing: '0.08em', color: 'rgba(245,237,214,0.3)', textTransform: 'uppercase', textAlign: 'center', marginBottom: '4px' }}>Offers</div>
                           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', justifyContent: 'center' }}>
-                            {profile.coaching_specialties.map(s => (
-                              <span key={s} style={{ padding: '2px 10px', borderRadius: '99px', fontSize: '11px', fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, letterSpacing: '0.06em', border: '1px solid rgba(196,130,42,0.35)', color: '#c4822a', background: 'rgba(196,130,42,0.08)' }}>
-                                {s}
+                            {profile.coaching_offerings.map(o => (
+                              <span key={o} style={{ padding: '3px 10px', borderRadius: '99px', fontSize: '12px', fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, letterSpacing: '0.06em', border: '1px solid rgba(245,237,214,0.15)', color: 'rgba(245,237,214,0.6)', background: 'rgba(255,255,255,0.04)' }}>
+                                {o}
                               </span>
                             ))}
                           </div>
                         </div>
                       )}
-                      {profile.coaching_experience && (
-                        <p style={{ margin: '0 0 4px', fontSize: '13px', color: 'rgba(245,237,214,0.5)', fontFamily: "'Barlow', sans-serif" }}>
-                          {profile.coaching_experience} experience
-                        </p>
-                      )}
-                      {profile.coaching_offerings && profile.coaching_offerings.length > 0 && (
-                        <p style={{ margin: '0 0 4px', fontSize: '13px', color: 'rgba(245,237,214,0.5)', fontFamily: "'Barlow', sans-serif" }}>
-                          Offers: {profile.coaching_offerings.join(', ')}
-                        </p>
-                      )}
                       {profile.age_groups_coached && profile.age_groups_coached.length > 0 && (
-                        <p style={{ margin: '0 0 4px', fontSize: '13px', color: 'rgba(245,237,214,0.5)', fontFamily: "'Barlow', sans-serif" }}>
-                          Ages: {profile.age_groups_coached.join(', ')}
-                        </p>
+                        <div>
+                          <div style={{ fontSize: '11px', fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, letterSpacing: '0.08em', color: 'rgba(245,237,214,0.3)', textTransform: 'uppercase', textAlign: 'center', marginBottom: '4px' }}>Age Groups</div>
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', justifyContent: 'center' }}>
+                            {profile.age_groups_coached.map(a => (
+                              <span key={a} style={{ padding: '3px 10px', borderRadius: '99px', fontSize: '12px', fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, letterSpacing: '0.06em', border: '1px solid rgba(245,237,214,0.15)', color: 'rgba(245,237,214,0.6)', background: 'rgba(255,255,255,0.04)' }}>
+                                {a}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
                       )}
                     </div>
                   )}
 
                   {/* ── Parent fields ── */}
                   {profile.role === 'parent' && (
-                    <div style={{ marginBottom: '10px', textAlign: 'center' }}>
-                      {profile.child_age_group && (
-                        <p style={{ margin: '0 0 4px', fontSize: '13px', color: 'rgba(245,237,214,0.5)', fontFamily: "'Barlow', sans-serif" }}>
-                          Child Age Group: {profile.child_age_group}
-                        </p>
-                      )}
-                      {(profile.child_position || profile.child_skill_level) && (
-                        <p style={{ margin: '0 0 4px', fontSize: '13px', color: 'rgba(245,237,214,0.5)', fontFamily: "'Barlow', sans-serif" }}>
-                          {[profile.child_position, profile.child_skill_level].filter(Boolean).join(' · ')}
+                    <div style={{ marginBottom: '12px', textAlign: 'center' }}>
+                      {(profile.child_position || profile.child_age_group || profile.child_skill_level) && (
+                        <p style={{ margin: '0 0 6px', fontSize: '13px', color: 'rgba(245,237,214,0.5)', fontFamily: "'Barlow', sans-serif" }}>
+                          {[profile.child_position, profile.child_age_group, profile.child_skill_level].filter(Boolean).join(' · ')}
                         </p>
                       )}
                       {profile.parent_looking_for && profile.parent_looking_for.length > 0 && (
-                        <p style={{ margin: '0 0 4px', fontSize: '13px', color: 'rgba(245,237,214,0.5)', fontFamily: "'Barlow', sans-serif" }}>
-                          Looking for: {profile.parent_looking_for.join(', ')}
-                        </p>
+                        <div>
+                          <div style={{ fontSize: '11px', fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, letterSpacing: '0.08em', color: 'rgba(245,237,214,0.3)', textTransform: 'uppercase', marginBottom: '4px' }}>Looking For</div>
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', justifyContent: 'center' }}>
+                            {profile.parent_looking_for.map(l => (
+                              <span key={l} style={{ padding: '3px 10px', borderRadius: '99px', fontSize: '12px', fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, letterSpacing: '0.06em', border: '1px solid rgba(245,237,214,0.15)', color: 'rgba(245,237,214,0.6)', background: 'rgba(255,255,255,0.04)' }}>
+                                {l}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
                       )}
                     </div>
                   )}
 
-                  {/* Bio */}
+                  {/* Bio — all roles */}
                   {profile.bio && (
                     <p style={{ fontSize: '14px', lineHeight: '1.65', color: 'rgba(245,237,214,0.7)', fontFamily: "'Barlow', sans-serif", margin: '0 0 20px', textAlign: 'center' }}>
                       {profile.bio}
