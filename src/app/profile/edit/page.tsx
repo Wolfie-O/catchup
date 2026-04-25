@@ -72,6 +72,146 @@ const ROLE_CARDS: { value: Role; icon: string; label: string; desc: string }[] =
   { value: 'parent', icon: '👪', label: 'Parent', desc: "I'm looking for opportunities for my child" },
 ]
 
+// ── Role-specific field sections ──
+
+function PlayerFields({ positions, onTogglePosition, level, setLevel, status, setStatus, bio, setBio, isMobile, showBio = true }: {
+  positions: string[]; onTogglePosition: (v: string) => void
+  level: string; setLevel: (v: string) => void
+  status: string; setStatus: (v: string) => void
+  bio: string; setBio: (v: string) => void
+  isMobile: boolean; showBio?: boolean
+}) {
+  return (
+    <>
+      <div>
+        <label style={LABEL}>Position(s)</label>
+        <ChipSelect options={POSITIONS} selected={positions} onToggle={onTogglePosition} />
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '16px' }}>
+        <div>
+          <label style={LABEL}>Highest Level Played</label>
+          <select value={level} onChange={e => setLevel(e.target.value)} style={SELECT} onFocus={focusBorder} onBlur={blurBorder}>
+            <option value="" disabled style={{ background: '#0d1f3c' }}>Select...</option>
+            {LEVELS.map(l => <option key={l} value={l} style={{ background: '#0d1f3c' }}>{l}</option>)}
+          </select>
+        </div>
+        <div>
+          <label style={LABEL}>Status</label>
+          <select value={status} onChange={e => setStatus(e.target.value)} style={SELECT} onFocus={focusBorder} onBlur={blurBorder}>
+            <option value="" disabled style={{ background: '#0d1f3c' }}>Select...</option>
+            <option value="Current" style={{ background: '#0d1f3c' }}>Current</option>
+            <option value="Washed Up" style={{ background: '#0d1f3c' }}>Washed Up</option>
+          </select>
+        </div>
+      </div>
+      {showBio && (
+        <div>
+          <label style={LABEL}>About You</label>
+          <textarea
+            value={bio} onChange={e => setBio(e.target.value)}
+            placeholder="Tell the community about yourself..."
+            rows={4}
+            style={{ ...INPUT, resize: 'vertical', minHeight: '100px', lineHeight: '1.5' } as React.CSSProperties}
+            onFocus={focusBorder} onBlur={blurBorder}
+          />
+        </div>
+      )}
+    </>
+  )
+}
+
+function CoachFields({ coachingSpecialties, onToggleSpecialty, coachingExperience, setCoachingExperience, coachingOfferings, onToggleOffering, ageGroupsCoached, onToggleAgeGroup, bio, setBio }: {
+  coachingSpecialties: string[]; onToggleSpecialty: (v: string) => void
+  coachingExperience: string; setCoachingExperience: (v: string) => void
+  coachingOfferings: string[]; onToggleOffering: (v: string) => void
+  ageGroupsCoached: string[]; onToggleAgeGroup: (v: string) => void
+  bio: string; setBio: (v: string) => void
+}) {
+  return (
+    <>
+      <div>
+        <label style={LABEL}>Coaching Specialties</label>
+        <ChipSelect options={COACH_SPECIALTIES} selected={coachingSpecialties} onToggle={onToggleSpecialty} />
+      </div>
+      <div>
+        <label style={LABEL}>Experience Level</label>
+        <select value={coachingExperience} onChange={e => setCoachingExperience(e.target.value)} style={SELECT} onFocus={focusBorder} onBlur={blurBorder}>
+          <option value="" disabled style={{ background: '#0d1f3c' }}>Select...</option>
+          {COACH_EXPERIENCE.map(exp => <option key={exp} value={exp} style={{ background: '#0d1f3c' }}>{exp}</option>)}
+        </select>
+      </div>
+      <div>
+        <label style={LABEL}>What I Offer</label>
+        <ChipSelect options={COACH_OFFERINGS} selected={coachingOfferings} onToggle={onToggleOffering} />
+      </div>
+      <div>
+        <label style={LABEL}>Age Groups I Work With</label>
+        <ChipSelect options={COACH_AGE_GROUPS} selected={ageGroupsCoached} onToggle={onToggleAgeGroup} />
+      </div>
+      <div>
+        <label style={LABEL}>Bio</label>
+        <textarea
+          value={bio} onChange={e => setBio(e.target.value)}
+          placeholder="Tell players and parents about yourself, your coaching philosophy, and experience"
+          rows={4}
+          style={{ ...INPUT, resize: 'vertical', minHeight: '100px', lineHeight: '1.5' } as React.CSSProperties}
+          onFocus={focusBorder} onBlur={blurBorder}
+        />
+      </div>
+    </>
+  )
+}
+
+function ParentFields({ childPosition, setChildPosition, childAgeGroup, setChildAgeGroup, childSkillLevel, setChildSkillLevel, parentLookingFor, onToggleLookingFor, bio, setBio }: {
+  childPosition: string; setChildPosition: (v: string) => void
+  childAgeGroup: string; setChildAgeGroup: (v: string) => void
+  childSkillLevel: string; setChildSkillLevel: (v: string) => void
+  parentLookingFor: string[]; onToggleLookingFor: (v: string) => void
+  bio: string; setBio: (v: string) => void
+}) {
+  return (
+    <>
+      <div>
+        <label style={LABEL}>Child&apos;s Primary Position</label>
+        <select value={childPosition} onChange={e => setChildPosition(e.target.value)} style={SELECT} onFocus={focusBorder} onBlur={blurBorder}>
+          <option value="" disabled style={{ background: '#0d1f3c' }}>Select...</option>
+          {POSITIONS.map(p => <option key={p} value={p} style={{ background: '#0d1f3c' }}>{p}</option>)}
+        </select>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+        <div>
+          <label style={LABEL}>Child&apos;s Age Group</label>
+          <select value={childAgeGroup} onChange={e => setChildAgeGroup(e.target.value)} style={SELECT} onFocus={focusBorder} onBlur={blurBorder}>
+            <option value="" disabled style={{ background: '#0d1f3c' }}>Select...</option>
+            {PARENT_AGE_GROUPS.map(g => <option key={g} value={g} style={{ background: '#0d1f3c' }}>{g}</option>)}
+          </select>
+        </div>
+        <div>
+          <label style={LABEL}>Child&apos;s Skill Level</label>
+          <select value={childSkillLevel} onChange={e => setChildSkillLevel(e.target.value)} style={SELECT} onFocus={focusBorder} onBlur={blurBorder}>
+            <option value="" disabled style={{ background: '#0d1f3c' }}>Select...</option>
+            {PARENT_SKILL_LEVELS.map(s => <option key={s} value={s} style={{ background: '#0d1f3c' }}>{s}</option>)}
+          </select>
+        </div>
+      </div>
+      <div>
+        <label style={LABEL}>Looking For</label>
+        <ChipSelect options={PARENT_LOOKING_FOR} selected={parentLookingFor} onToggle={onToggleLookingFor} />
+      </div>
+      <div>
+        <label style={LABEL}>About My Child</label>
+        <textarea
+          value={bio} onChange={e => setBio(e.target.value)}
+          placeholder="Tell coaches and teams about your child..."
+          rows={4}
+          style={{ ...INPUT, resize: 'vertical', minHeight: '100px', lineHeight: '1.5' } as React.CSSProperties}
+          onFocus={focusBorder} onBlur={blurBorder}
+        />
+      </div>
+    </>
+  )
+}
+
 export default function ProfileEditPage() {
   const router = useRouter()
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -130,6 +270,7 @@ export default function ProfileEditPage() {
         .single()
 
       if (profile) {
+        console.log('[ProfileEdit] loaded role:', profile.role)
         setRole((profile.role as Role) || '')
         setFirstName(profile.first_name ?? '')
         setLastName(profile.last_name ?? '')
@@ -166,11 +307,6 @@ export default function ProfileEditPage() {
     setList(list.includes(val) ? list.filter(x => x !== val) : [...list, val])
   }
 
-  const isPlayer = role === 'player' || role === 'both'
-  const isCoach = role === 'coach' || role === 'both'
-  const isParent = role === 'parent'
-  const bioLabel = isParent ? 'About My Child' : 'About You'
-
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!role) { setError('Please select your role.'); return }
@@ -197,6 +333,10 @@ export default function ProfileEditPage() {
           avatarUrl = urlData.publicUrl
         }
       }
+
+      const isPlayer = role === 'player' || role === 'both'
+      const isCoach = role === 'coach' || role === 'both'
+      const isParent = role === 'parent'
 
       const { error: profileErr } = await supabase.from('profiles').upsert({
         id: userId,
@@ -234,6 +374,7 @@ export default function ProfileEditPage() {
     }
   }
 
+  // Block render until DB data is loaded — role must be known before form appears
   if (pageLoading) {
     return (
       <div style={{ minHeight: '100vh', background: '#0d1f3c', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -241,6 +382,12 @@ export default function ProfileEditPage() {
       </div>
     )
   }
+
+  const onTogglePosition = (v: string) => toggleChip(positions, setPositions, v)
+  const onToggleSpecialty = (v: string) => toggleChip(coachingSpecialties, setCoachingSpecialties, v)
+  const onToggleOffering = (v: string) => toggleChip(coachingOfferings, setCoachingOfferings, v)
+  const onToggleAgeGroup = (v: string) => toggleChip(ageGroupsCoached, setAgeGroupsCoached, v)
+  const onToggleLookingFor = (v: string) => toggleChip(parentLookingFor, setParentLookingFor, v)
 
   return (
     <div style={{ minHeight: '100vh', background: '#0d1f3c', color: '#f5edd6', fontFamily: "'Barlow', sans-serif" }}>
@@ -295,189 +442,130 @@ export default function ProfileEditPage() {
             </div>
           </div>
 
-          {/* ── Fields (shown once role is selected) ── */}
-          {role && <div style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(196,130,42,0.2)', borderRadius: '16px', padding: '32px 28px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          {/* ── Fields card — only shown after role is confirmed ── */}
+          {role && (
+            <div style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(196,130,42,0.2)', borderRadius: '16px', padding: '32px 28px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
 
-            {/* Photo */}
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                style={{
-                  width: '100px', height: '100px', borderRadius: '50%', border: '2px dashed rgba(196,130,42,0.5)',
-                  background: avatarPreview ? 'transparent' : 'rgba(255,255,255,0.04)',
-                  cursor: 'pointer', overflow: 'hidden', padding: 0,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'border-color 0.15s',
-                }}
-                onMouseEnter={e => (e.currentTarget.style.borderColor = '#c4822a')}
-                onMouseLeave={e => (e.currentTarget.style.borderColor = 'rgba(196,130,42,0.5)')}
-                aria-label="Upload profile photo"
-              >
-                {avatarPreview
-                  ? <img src={avatarPreview} alt="Preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                  : <span style={{ fontSize: '28px' }}>📷</span>}
-              </button>
-              <span style={{ marginTop: '10px', fontSize: '12px', fontFamily: "'Barlow Condensed', sans-serif", letterSpacing: '0.08em', color: 'rgba(245,237,214,0.4)' }}>
-                {avatarPreview ? 'Click to change photo' : 'Click to upload photo'}
-              </span>
-              <input ref={fileInputRef} type="file" accept="image/*" onChange={handleAvatarChange} style={{ display: 'none' }} />
-            </div>
-
-            {/* Name */}
-            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '16px' }}>
-              <div>
-                <label style={LABEL}>First Name</label>
-                <input type="text" value={firstName} onChange={e => setFirstName(e.target.value)}
-                  placeholder="Joe" required style={INPUT} onFocus={focusBorder} onBlur={blurBorder} />
+              {/* Photo */}
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  style={{
+                    width: '100px', height: '100px', borderRadius: '50%', border: '2px dashed rgba(196,130,42,0.5)',
+                    background: avatarPreview ? 'transparent' : 'rgba(255,255,255,0.04)',
+                    cursor: 'pointer', overflow: 'hidden', padding: 0,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'border-color 0.15s',
+                  }}
+                  onMouseEnter={e => (e.currentTarget.style.borderColor = '#c4822a')}
+                  onMouseLeave={e => (e.currentTarget.style.borderColor = 'rgba(196,130,42,0.5)')}
+                  aria-label="Upload profile photo"
+                >
+                  {avatarPreview
+                    ? <img src={avatarPreview} alt="Preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    : <span style={{ fontSize: '28px' }}>📷</span>}
+                </button>
+                <span style={{ marginTop: '10px', fontSize: '12px', fontFamily: "'Barlow Condensed', sans-serif", letterSpacing: '0.08em', color: 'rgba(245,237,214,0.4)' }}>
+                  {avatarPreview ? 'Click to change photo' : 'Click to upload photo'}
+                </span>
+                <input ref={fileInputRef} type="file" accept="image/*" onChange={handleAvatarChange} style={{ display: 'none' }} />
               </div>
-              <div>
-                <label style={LABEL}>Last Name</label>
-                <input type="text" value={lastName} onChange={e => setLastName(e.target.value)}
-                  placeholder="Smith" required style={INPUT} onFocus={focusBorder} onBlur={blurBorder} />
+
+              {/* Name */}
+              <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '16px' }}>
+                <div>
+                  <label style={LABEL}>First Name</label>
+                  <input type="text" value={firstName} onChange={e => setFirstName(e.target.value)}
+                    placeholder="Joe" required style={INPUT} onFocus={focusBorder} onBlur={blurBorder} />
+                </div>
+                <div>
+                  <label style={LABEL}>Last Name</label>
+                  <input type="text" value={lastName} onChange={e => setLastName(e.target.value)}
+                    placeholder="Smith" required style={INPUT} onFocus={focusBorder} onBlur={blurBorder} />
+                </div>
               </div>
-            </div>
 
-            {/* Zip */}
-            <div>
-              <label style={LABEL}>Zip Code</label>
-              <input type="text" value={zip} onChange={e => setZip(e.target.value.replace(/\D/g, '').slice(0, 5))}
-                placeholder="12345" maxLength={5} style={INPUT} onFocus={focusBorder} onBlur={blurBorder} />
-            </div>
-
-            {/* ── Player fields ── */}
-            {isPlayer && (
-              <>
-                <div>
-                  <label style={LABEL}>Position(s)</label>
-                  <ChipSelect options={POSITIONS} selected={positions} onToggle={v => toggleChip(positions, setPositions, v)} />
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                  <div>
-                    <label style={LABEL}>Highest Level Played</label>
-                    <select value={level} onChange={e => setLevel(e.target.value)} style={SELECT} onFocus={focusBorder} onBlur={blurBorder}>
-                      <option value="" disabled style={{ background: '#0d1f3c' }}>Select...</option>
-                      {LEVELS.map(l => <option key={l} value={l} style={{ background: '#0d1f3c' }}>{l}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label style={LABEL}>Status</label>
-                    <select value={status} onChange={e => setStatus(e.target.value)} style={SELECT} onFocus={focusBorder} onBlur={blurBorder}>
-                      <option value="" disabled style={{ background: '#0d1f3c' }}>Select...</option>
-                      <option value="Current" style={{ background: '#0d1f3c' }}>Current</option>
-                      <option value="Washed Up" style={{ background: '#0d1f3c' }}>Washed Up</option>
-                    </select>
-                  </div>
-                </div>
-              </>
-            )}
-
-            {/* ── Coach fields ── */}
-            {isCoach && (
-              <>
-                <div>
-                  <label style={LABEL}>Coaching Specialties</label>
-                  <ChipSelect options={COACH_SPECIALTIES} selected={coachingSpecialties} onToggle={v => toggleChip(coachingSpecialties, setCoachingSpecialties, v)} />
-                </div>
-                <div>
-                  <label style={LABEL}>Experience Level</label>
-                  <select value={coachingExperience} onChange={e => setCoachingExperience(e.target.value)} style={SELECT} onFocus={focusBorder} onBlur={blurBorder}>
-                    <option value="" disabled style={{ background: '#0d1f3c' }}>Select...</option>
-                    {COACH_EXPERIENCE.map(exp => <option key={exp} value={exp} style={{ background: '#0d1f3c' }}>{exp}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label style={LABEL}>What I Offer</label>
-                  <ChipSelect options={COACH_OFFERINGS} selected={coachingOfferings} onToggle={v => toggleChip(coachingOfferings, setCoachingOfferings, v)} />
-                </div>
-                <div>
-                  <label style={LABEL}>Age Groups I Work With</label>
-                  <ChipSelect options={COACH_AGE_GROUPS} selected={ageGroupsCoached} onToggle={v => toggleChip(ageGroupsCoached, setAgeGroupsCoached, v)} />
-                </div>
-                <div>
-                  <label style={LABEL}>Bio</label>
-                  <textarea
-                    value={bio} onChange={e => setBio(e.target.value)}
-                    placeholder="Tell players and parents about yourself, your coaching philosophy, and experience"
-                    rows={4}
-                    style={{ ...INPUT, resize: 'vertical', minHeight: '100px', lineHeight: '1.5' } as React.CSSProperties}
-                    onFocus={focusBorder} onBlur={blurBorder}
-                  />
-                </div>
-              </>
-            )}
-
-            {/* ── Parent fields ── */}
-            {isParent && (
-              <>
-                <div>
-                  <label style={LABEL}>Child&apos;s Primary Position</label>
-                  <select value={childPosition} onChange={e => setChildPosition(e.target.value)} style={SELECT} onFocus={focusBorder} onBlur={blurBorder}>
-                    <option value="" disabled style={{ background: '#0d1f3c' }}>Select...</option>
-                    {POSITIONS.map(p => <option key={p} value={p} style={{ background: '#0d1f3c' }}>{p}</option>)}
-                  </select>
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                  <div>
-                    <label style={LABEL}>Child&apos;s Age Group</label>
-                    <select value={childAgeGroup} onChange={e => setChildAgeGroup(e.target.value)} style={SELECT} onFocus={focusBorder} onBlur={blurBorder}>
-                      <option value="" disabled style={{ background: '#0d1f3c' }}>Select...</option>
-                      {PARENT_AGE_GROUPS.map(g => <option key={g} value={g} style={{ background: '#0d1f3c' }}>{g}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label style={LABEL}>Child&apos;s Skill Level</label>
-                    <select value={childSkillLevel} onChange={e => setChildSkillLevel(e.target.value)} style={SELECT} onFocus={focusBorder} onBlur={blurBorder}>
-                      <option value="" disabled style={{ background: '#0d1f3c' }}>Select...</option>
-                      {PARENT_SKILL_LEVELS.map(s => <option key={s} value={s} style={{ background: '#0d1f3c' }}>{s}</option>)}
-                    </select>
-                  </div>
-                </div>
-                <div>
-                  <label style={LABEL}>Looking For</label>
-                  <ChipSelect options={PARENT_LOOKING_FOR} selected={parentLookingFor} onToggle={v => toggleChip(parentLookingFor, setParentLookingFor, v)} />
-                </div>
-              </>
-            )}
-
-            {/* ── Bio (player / parent only — coaches have it in their section) ── */}
-            {!isCoach && (
+              {/* Zip */}
               <div>
-                <label style={LABEL}>{bioLabel}</label>
-                <textarea
-                  value={bio} onChange={e => setBio(e.target.value)}
-                  placeholder={isParent ? 'Tell coaches and teams about your child...' : 'Tell the community about yourself...'}
-                  rows={4}
-                  style={{ ...INPUT, resize: 'vertical', minHeight: '100px', lineHeight: '1.5' } as React.CSSProperties}
-                  onFocus={focusBorder} onBlur={blurBorder}
+                <label style={LABEL}>Zip Code</label>
+                <input type="text" value={zip} onChange={e => setZip(e.target.value.replace(/\D/g, '').slice(0, 5))}
+                  placeholder="12345" maxLength={5} style={INPUT} onFocus={focusBorder} onBlur={blurBorder} />
+              </div>
+
+              {/* ── Role-specific fields ── */}
+              {role === 'player' && (
+                <PlayerFields
+                  positions={positions} onTogglePosition={onTogglePosition}
+                  level={level} setLevel={setLevel}
+                  status={status} setStatus={setStatus}
+                  bio={bio} setBio={setBio}
+                  isMobile={isMobile}
                 />
-              </div>
-            )}
+              )}
+              {role === 'coach' && (
+                <CoachFields
+                  coachingSpecialties={coachingSpecialties} onToggleSpecialty={onToggleSpecialty}
+                  coachingExperience={coachingExperience} setCoachingExperience={setCoachingExperience}
+                  coachingOfferings={coachingOfferings} onToggleOffering={onToggleOffering}
+                  ageGroupsCoached={ageGroupsCoached} onToggleAgeGroup={onToggleAgeGroup}
+                  bio={bio} setBio={setBio}
+                />
+              )}
+              {role === 'both' && (
+                <>
+                  <PlayerFields
+                    positions={positions} onTogglePosition={onTogglePosition}
+                    level={level} setLevel={setLevel}
+                    status={status} setStatus={setStatus}
+                    bio={bio} setBio={setBio}
+                    isMobile={isMobile}
+                    showBio={false}
+                  />
+                  <CoachFields
+                    coachingSpecialties={coachingSpecialties} onToggleSpecialty={onToggleSpecialty}
+                    coachingExperience={coachingExperience} setCoachingExperience={setCoachingExperience}
+                    coachingOfferings={coachingOfferings} onToggleOffering={onToggleOffering}
+                    ageGroupsCoached={ageGroupsCoached} onToggleAgeGroup={onToggleAgeGroup}
+                    bio={bio} setBio={setBio}
+                  />
+                </>
+              )}
+              {role === 'parent' && (
+                <ParentFields
+                  childPosition={childPosition} setChildPosition={setChildPosition}
+                  childAgeGroup={childAgeGroup} setChildAgeGroup={setChildAgeGroup}
+                  childSkillLevel={childSkillLevel} setChildSkillLevel={setChildSkillLevel}
+                  parentLookingFor={parentLookingFor} onToggleLookingFor={onToggleLookingFor}
+                  bio={bio} setBio={setBio}
+                />
+              )}
 
-            {error && (
-              <div style={{
-                padding: '12px 16px', borderRadius: '8px', fontSize: '14px',
-                background: 'rgba(212,69,26,0.15)', border: '1px solid rgba(212,69,26,0.4)', color: '#f97950',
-                fontFamily: "'Barlow Condensed', sans-serif", letterSpacing: '0.03em',
-              }}>
-                {error}
-              </div>
-            )}
+              {error && (
+                <div style={{
+                  padding: '12px 16px', borderRadius: '8px', fontSize: '14px',
+                  background: 'rgba(212,69,26,0.15)', border: '1px solid rgba(212,69,26,0.4)', color: '#f97950',
+                  fontFamily: "'Barlow Condensed', sans-serif", letterSpacing: '0.03em',
+                }}>
+                  {error}
+                </div>
+              )}
 
-            <button
-              type="submit"
-              disabled={loading}
-              style={{
-                width: '100%', padding: '14px', borderRadius: '8px', border: 'none',
-                cursor: loading ? 'not-allowed' : 'pointer',
-                background: loading ? 'rgba(196,130,42,0.5)' : '#c4822a',
-                color: '#0d1f3c', fontFamily: "'Barlow Condensed', sans-serif",
-                fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', fontSize: '15px',
-                transition: 'background 0.15s',
-              }}
-            >
-              {loading ? 'Saving…' : 'Save Changes'}
-            </button>
-          </div>}
+              <button
+                type="submit"
+                disabled={loading}
+                style={{
+                  width: '100%', padding: '14px', borderRadius: '8px', border: 'none',
+                  cursor: loading ? 'not-allowed' : 'pointer',
+                  background: loading ? 'rgba(196,130,42,0.5)' : '#c4822a',
+                  color: '#0d1f3c', fontFamily: "'Barlow Condensed', sans-serif",
+                  fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', fontSize: '15px',
+                  transition: 'background 0.15s',
+                }}
+              >
+                {loading ? 'Saving…' : 'Save Changes'}
+              </button>
+            </div>
+          )}
         </form>
       </main>
     </div>
