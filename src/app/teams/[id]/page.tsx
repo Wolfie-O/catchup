@@ -78,7 +78,7 @@ type CoachPost = {
   title: string | null
   content: string
   post_type: 'note' | 'practice_plan'
-  is_pinned: boolean
+  pinned: boolean
   created_at: string
   authorName: string
 }
@@ -538,13 +538,13 @@ export default function TeamDetailPage() {
         .limit(200),
       supabase
         .from('coaches_room_posts')
-        .select('id, user_id, title, content, post_type, is_pinned, created_at')
+        .select('id, user_id, title, content, post_type, pinned, created_at')
         .eq('team_id', teamId)
         .order('created_at', { ascending: false }),
     ])
 
     const rawMsgs = (msgRes.data ?? []) as { id: string; user_id: string; content: string; created_at: string }[]
-    const rawPosts = (postRes.data ?? []) as { id: string; user_id: string; title: string | null; content: string; post_type: string; is_pinned: boolean; created_at: string }[]
+    const rawPosts = (postRes.data ?? []) as { id: string; user_id: string; title: string | null; content: string; post_type: string; pinned: boolean; created_at: string }[]
 
     const allUserIds = [...new Set([...rawMsgs.map(m => m.user_id), ...rawPosts.map(p => p.user_id)])]
     const profileMap: Record<string, { first_name: string | null; last_name: string | null; avatar_url: string | null }> = {}
@@ -567,8 +567,8 @@ export default function TeamDetailPage() {
         return { ...p, post_type: p.post_type as 'note' | 'practice_plan', authorName: a ? [a.first_name, a.last_name].filter(Boolean).join(' ') || 'Coach' : 'Coach' }
       })
       .sort((a, b) => {
-        if (a.is_pinned && !b.is_pinned) return -1
-        if (!a.is_pinned && b.is_pinned) return 1
+        if (a.pinned && !b.pinned) return -1
+        if (!a.pinned && b.pinned) return 1
         return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
       })
     setCoachPosts(sorted)
@@ -620,22 +620,22 @@ export default function TeamDetailPage() {
     setCpSubmitting(true)
     const { data, error } = await supabase
       .from('coaches_room_posts')
-      .insert({ team_id: teamId, user_id: userId, title: cpTitle.trim() || null, content: cpContent.trim(), post_type: cpType, is_pinned: cpPinned })
-      .select('id, user_id, title, content, post_type, is_pinned, created_at')
+      .insert({ team_id: teamId, user_id: userId, title: cpTitle.trim() || null, content: cpContent.trim(), post_type: cpType, pinned: cpPinned })
+      .select('id, user_id, title, content, post_type, pinned, created_at')
       .single()
     if (!error && data) {
       const { data: prof } = await supabase.from('profiles').select('first_name, last_name').eq('id', userId).maybeSingle()
       const p = prof as { first_name: string | null; last_name: string | null } | null
       const newPost: CoachPost = {
-        ...(data as { id: string; user_id: string; title: string | null; content: string; post_type: string; is_pinned: boolean; created_at: string }),
+        ...(data as { id: string; user_id: string; title: string | null; content: string; post_type: string; pinned: boolean; created_at: string }),
         post_type: cpType,
         authorName: p ? [p.first_name, p.last_name].filter(Boolean).join(' ') || 'Coach' : 'Coach',
       }
       setCoachPosts(prev => {
         const updated = [newPost, ...prev]
         return updated.sort((a, b) => {
-          if (a.is_pinned && !b.is_pinned) return -1
-          if (!a.is_pinned && b.is_pinned) return 1
+          if (a.pinned && !b.pinned) return -1
+          if (!a.pinned && b.pinned) return 1
           return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
         })
       })
@@ -1428,10 +1428,10 @@ export default function TeamDetailPage() {
                       No notes yet — add a practice plan or note
                     </p>
                   ) : coachPosts.map(post => (
-                    <div key={post.id} style={{ background: 'rgba(255,255,255,0.04)', border: `1px solid ${post.is_pinned ? 'rgba(196,130,42,0.4)' : 'rgba(196,130,42,0.15)'}`, borderRadius: '10px', padding: '12px 14px' }}>
+                    <div key={post.id} style={{ background: 'rgba(255,255,255,0.04)', border: `1px solid ${post.pinned ? 'rgba(196,130,42,0.4)' : 'rgba(196,130,42,0.15)'}`, borderRadius: '10px', padding: '12px 14px' }}>
                       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '8px', marginBottom: '6px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                          {post.is_pinned && <span style={{ fontSize: '12px' }}>📌</span>}
+                          {post.pinned && <span style={{ fontSize: '12px' }}>📌</span>}
                           <span style={{ fontSize: '10px', fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, letterSpacing: '0.06em', color: post.post_type === 'practice_plan' ? '#63b3ed' : 'rgba(245,237,214,0.5)', background: post.post_type === 'practice_plan' ? 'rgba(99,179,237,0.1)' : 'rgba(255,255,255,0.06)', border: `1px solid ${post.post_type === 'practice_plan' ? 'rgba(99,179,237,0.3)' : 'rgba(245,237,214,0.12)'}`, borderRadius: '4px', padding: '1px 6px' }}>
                             {post.post_type === 'practice_plan' ? 'Practice Plan' : 'Note'}
                           </span>
