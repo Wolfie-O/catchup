@@ -583,14 +583,8 @@ export default function ProfilePage() {
 
         <main style={{ maxWidth: '1100px', margin: '0 auto', padding: '32px 16px 80px' }}>
 
-          {/* ── Two-column layout ── */}
-          <div style={{ display: 'flex', gap: '28px', alignItems: 'flex-start', flexWrap: 'wrap' }}>
-
-            {/* ════════════════════ LEFT COLUMN ════════════════════ */}
-            <div style={{ flex: '0 0 340px', maxWidth: '100%', display: 'flex', flexDirection: 'column', gap: '20px' }}>
-
-              {/* ── Profile card ── */}
-              <div style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(196,130,42,0.2)', borderRadius: '16px', padding: '28px 24px' }}>
+          {/* ── Profile card — full width ── */}
+          <div style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(196,130,42,0.2)', borderRadius: '16px', padding: '28px 24px', marginBottom: '28px' }}>
 
                 {/* ── Profile view ── */}
                 <div>
@@ -635,14 +629,14 @@ export default function ProfilePage() {
                         </div>
                       )}
 
-                      {/* Catch Partners count */}
+                      {/* Friends count */}
                       <div style={{ marginTop: '10px' }}>
                         <span style={{
                           fontFamily: "'Barlow Condensed', sans-serif", fontSize: '13px',
                           letterSpacing: '0.04em', color: 'rgba(245,237,214,0.55)',
                         }}>
                           <strong style={{ fontWeight: 700, color: '#f5edd6' }}>{partnerCount}</strong>{' '}
-                          Catch Partner{partnerCount !== 1 ? 's' : ''}
+                          Friend{partnerCount !== 1 ? 's' : ''}
                         </span>
                       </div>
 
@@ -769,10 +763,16 @@ export default function ProfilePage() {
                     Edit Profile
                   </a>
                 </div>
-              </div>
+          </div>
 
-              {/* ── Where I've Played ── */}
-              <div style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(196,130,42,0.2)', borderRadius: '16px', padding: '24px' }}>
+          {/* ── Two-column layout (secondary sections) ── */}
+          <div style={{ display: 'flex', gap: '28px', alignItems: 'flex-start', flexWrap: 'wrap' }}>
+
+            {/* ════════════════════ LEFT COLUMN ════════════════════ */}
+            <div style={{ flex: '0 0 340px', maxWidth: '100%', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+
+              {/* ── Where I've Played (players and both only) ── */}
+              {(profile.role === 'player' || profile.role === 'both' || !profile.role) && <div style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(196,130,42,0.2)', borderRadius: '16px', padding: '24px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
                   <h2 style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: '20px', letterSpacing: '0.05em', margin: 0, color: '#f5edd6' }}>
                     Where I've <span style={{ color: '#c4822a' }}>Played</span>
@@ -908,17 +908,17 @@ export default function ProfilePage() {
                     </div>
                   </div>
                 )}
-              </div>
+              </div>}
 
-              {/* ── Catch Partners ── */}
+              {/* ── Friends ── */}
               <div style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(196,130,42,0.2)', borderRadius: '16px', padding: '24px' }}>
                 <h2 style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: '20px', letterSpacing: '0.05em', margin: '0 0 16px', color: '#f5edd6' }}>
-                  {partnerCount} <span style={{ color: '#c4822a' }}>Catch Partner{partnerCount !== 1 ? 's' : ''}</span>
+                  {partnerCount} <span style={{ color: '#c4822a' }}>Friend{partnerCount !== 1 ? 's' : ''}</span>
                 </h2>
 
                 {partnersList.length === 0 ? (
                   <p style={{ fontSize: '13px', color: 'rgba(245,237,214,0.35)', fontFamily: "'Barlow', sans-serif", margin: 0 }}>
-                    No catch partners yet — send a Partner Up request to a player.
+                    No friends yet — send a Partner Up request to connect.
                   </p>
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
