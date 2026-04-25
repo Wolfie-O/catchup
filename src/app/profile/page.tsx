@@ -44,6 +44,12 @@ type Profile = {
   parent_looking_for: string[] | null
 }
 
+type TeamMembership = {
+  team_id: string
+  role: string
+  teams: { id: string; name: string; logo_url: string | null; level: string | null }
+}
+
 type PlayingHistory = {
   id: string
   user_id: string
@@ -261,6 +267,9 @@ export default function ProfilePage() {
   const [hNotes, setHNotes] = useState('')
   const [hSaving, setHSaving] = useState(false)
 
+  // ── My Teams ─────────────────────────────────────────────────────────────────
+  const [myTeams, setMyTeams] = useState<TeamMembership[]>([])
+
   // ── Partners ─────────────────────────────────────────────────────────────────
   const [partnersList, setPartnersList] = useState<FollowPerson[]>([])
   const [pendingRequests, setPendingRequests] = useState<PendingRequest[]>([])
@@ -321,6 +330,19 @@ export default function ProfilePage() {
       .eq('user_id', userId)
       .order('year_start', { ascending: false })
       .then(({ data }) => setHistory((data ?? []) as PlayingHistory[]))
+  }, [userId])
+
+  // ── Fetch my teams ────────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!userId) return
+    supabase
+      .from('team_members')
+      .select('team_id, role, teams(id, name, logo_url, level)')
+      .eq('user_id', userId)
+      .eq('status', 'active')
+      .then(({ data }) => {
+        if (data) setMyTeams((data as unknown as TeamMembership[]).filter(m => m.teams != null))
+      })
   }, [userId])
 
   // ── Fetch partners + pending requests ────────────────────────────────────────
@@ -764,6 +786,50 @@ export default function ProfilePage() {
                   </a>
                 </div>
           </div>
+
+          {/* ── My Teams ── */}
+          {myTeams.length > 0 && (
+            <div style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(196,130,42,0.2)', borderRadius: '16px', padding: '24px', marginBottom: '28px' }}>
+              <h2 style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: '20px', letterSpacing: '0.05em', margin: '0 0 16px', color: '#f5edd6' }}>
+                My <span style={{ color: '#c4822a' }}>Teams</span>
+              </h2>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px' }}>
+                {myTeams.map(m => (
+                  <Link
+                    key={m.team_id}
+                    href={`/teams/${m.teams.id}`}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: '12px',
+                      padding: '12px 16px', borderRadius: '10px',
+                      background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(196,130,42,0.2)',
+                      textDecoration: 'none', transition: 'border-color 0.15s',
+                      flex: '1 1 220px', minWidth: 0,
+                    }}
+                  >
+                    {m.teams.logo_url ? (
+                      <img src={m.teams.logo_url} alt="" style={{ width: 44, height: 44, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
+                    ) : (
+                      <div style={{
+                        width: 44, height: 44, borderRadius: '50%', background: '#c4822a', flexShrink: 0,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        fontFamily: "'Bebas Neue', sans-serif", fontSize: 16, color: '#0d1f3c', letterSpacing: '0.04em',
+                      }}>
+                        {m.teams.name.split(' ').map((w: string) => w[0]).filter(Boolean).slice(0, 2).join('').toUpperCase() || '?'}
+                      </div>
+                    )}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: '15px', color: '#f5edd6', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
+                        {m.teams.name}
+                      </div>
+                      <div style={{ fontSize: '11px', color: 'rgba(245,237,214,0.45)', fontFamily: "'Barlow', sans-serif", marginTop: '2px', textTransform: 'capitalize' }}>
+                        {m.role}{m.teams.level ? ` · ${m.teams.level}` : ''}
+                      </div>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* ── Two-column layout (secondary sections) ── */}
           <div style={{ display: 'flex', gap: '28px', alignItems: 'flex-start', flexWrap: 'wrap' }}>

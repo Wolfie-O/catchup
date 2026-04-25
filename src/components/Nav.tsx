@@ -5,6 +5,22 @@ import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 
+type MyTeam = {
+  team_id: string
+  role: string
+  teams: { id: string; name: string; logo_url: string | null }
+}
+
+function NavTeamLogo({ name, logoUrl, size = 22 }: { name: string; logoUrl: string | null; size?: number }) {
+  const initials = name.split(' ').map((w: string) => w[0]).filter(Boolean).slice(0, 2).join('').toUpperCase() || '?'
+  if (logoUrl) return <img src={logoUrl} alt="" style={{ width: size, height: size, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
+  return (
+    <div style={{ width: size, height: size, borderRadius: '50%', background: '#c4822a', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Bebas Neue', sans-serif", fontSize: Math.round(size * 0.45), color: '#0d1f3c', letterSpacing: '0.04em', flexShrink: 0 }}>
+      {initials}
+    </div>
+  )
+}
+
 export default function Nav() {
   const router = useRouter()
   const pathname = usePathname()
@@ -12,32 +28,35 @@ export default function Nav() {
   const [firstName, setFirstName] = useState<string | null>(null)
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
   const [menuOpen, setMenuOpen] = useState(false)
+  const [myTeams, setMyTeams] = useState<MyTeam[]>([])
+  const [teamsDropdownOpen, setTeamsDropdownOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
+  const teamsMenuRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    async function fetchFirstName(uid: string) {
-      const { data } = await supabase
-        .from('profiles')
-        .select('first_name, avatar_url')
-        .eq('id', uid)
-        .single()
-      if (data) {
-        setFirstName(data.first_name ?? null)
-        setAvatarUrl(data.avatar_url ?? null)
+    async function fetchUserData(uid: string) {
+      const [profileRes, teamsRes] = await Promise.all([
+        supabase.from('profiles').select('first_name, avatar_url').eq('id', uid).single(),
+        supabase.from('team_members').select('team_id, role, teams(id, name, logo_url)').eq('user_id', uid).eq('status', 'active'),
+      ])
+      if (profileRes.data) {
+        setFirstName(profileRes.data.first_name ?? null)
+        setAvatarUrl(profileRes.data.avatar_url ?? null)
       }
+      if (teamsRes.data) setMyTeams((teamsRes.data as unknown as MyTeam[]).filter(m => m.teams != null))
     }
 
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session) {
         setUserId(session.user.id)
-        fetchFirstName(session.user.id)
+        fetchUserData(session.user.id)
       }
     })
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, session) => {
       setUserId(session?.user.id ?? null)
-      if (session) fetchFirstName(session.user.id)
-      else { setFirstName(null); setAvatarUrl(null) }
+      if (session) fetchUserData(session.user.id)
+      else { setFirstName(null); setAvatarUrl(null); setMyTeams([]) }
     })
 
     return () => subscription.unsubscribe()
@@ -49,13 +68,16 @@ export default function Nav() {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
         setMenuOpen(false)
       }
+      if (teamsMenuRef.current && !teamsMenuRef.current.contains(e.target as Node)) {
+        setTeamsDropdownOpen(false)
+      }
     }
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
-  // Close dropdown on route change
-  useEffect(() => { setMenuOpen(false) }, [pathname])
+  // Close dropdowns on route change
+  useEffect(() => { setMenuOpen(false); setTeamsDropdownOpen(false) }, [pathname])
 
   async function handleLogOut() {
     await supabase.auth.signOut()
@@ -92,7 +114,61 @@ export default function Nav() {
       <div className="hidden md:flex items-center gap-1">
         {userId && navLink('/players', 'Community')}
         {userId && navLink('/feed', 'Feed')}
-        {userId && navLink('/teams', 'Teams')}
+        {userId && myTeams.length === 0 && navLink('/teams', 'Teams')}
+        {userId && myTeams.length === 1 && (
+          <Link
+            href={`/teams/${myTeams[0].teams.id}`}
+            className="font-condensed font-semibold tracking-widest uppercase text-sm px-4 py-2 rounded transition-colors text-cream-dark hover:text-dirt hover:bg-dirt/10"
+            style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+          >
+            <NavTeamLogo name={myTeams[0].teams.name} logoUrl={myTeams[0].teams.logo_url} size={20} />
+            {myTeams[0].teams.name}
+          </Link>
+        )}
+        {userId && myTeams.length >= 2 && (
+          <div ref={teamsMenuRef} style={{ position: 'relative' }}>
+            <button
+              onClick={() => setTeamsDropdownOpen(o => !o)}
+              className="font-condensed font-semibold tracking-widest uppercase text-sm px-4 py-2 rounded transition-colors text-cream-dark hover:text-dirt hover:bg-dirt/10"
+              style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+            >
+              <NavTeamLogo name={myTeams[0].teams.name} logoUrl={myTeams[0].teams.logo_url} size={20} />
+              My Teams
+              <svg width="10" height="10" viewBox="0 0 10 10" fill="none" style={{ marginLeft: 2 }}>
+                <path d="M2 3.5L5 6.5L8 3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
+            {teamsDropdownOpen && (
+              <div style={{
+                position: 'absolute', top: 'calc(100% + 6px)', left: 0,
+                minWidth: '200px', background: '#0d1f3c',
+                border: '1px solid rgba(196,130,42,0.35)',
+                borderRadius: '10px', overflow: 'hidden',
+                boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
+                zIndex: 100,
+              }}>
+                {myTeams.map(m => (
+                  <Link
+                    key={m.team_id}
+                    href={`/teams/${m.teams.id}`}
+                    className="block font-condensed font-semibold tracking-widest uppercase text-sm px-4 py-3 transition-colors text-cream-dark hover:text-dirt hover:bg-dirt/10"
+                    style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+                  >
+                    <NavTeamLogo name={m.teams.name} logoUrl={m.teams.logo_url} size={20} />
+                    {m.teams.name}
+                  </Link>
+                ))}
+                <div style={{ borderTop: '1px solid rgba(196,130,42,0.2)', margin: '4px 0' }} />
+                <Link
+                  href="/teams"
+                  className="block font-condensed font-semibold tracking-widest uppercase text-sm px-4 py-3 transition-colors text-cream-dark hover:text-dirt hover:bg-dirt/10"
+                >
+                  Browse All Teams
+                </Link>
+              </div>
+            )}
+          </div>
+        )}
         <div className="flex items-center gap-2 ml-2">
           {userId ? (
             <>
@@ -179,7 +255,18 @@ export default function Nav() {
               }}>
                 {navLink('/players', 'Community', true)}
                 {navLink('/feed', 'Feed', true)}
-                {navLink('/teams', 'Teams', true)}
+                {myTeams.length === 0 && navLink('/teams', 'Teams', true)}
+                {myTeams.length >= 1 && myTeams.map(m => (
+                  <Link
+                    key={m.team_id}
+                    href={`/teams/${m.teams.id}`}
+                    className="block font-condensed font-semibold tracking-widest uppercase text-sm px-4 py-3 transition-colors text-cream-dark hover:text-dirt hover:bg-dirt/10"
+                    style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+                  >
+                    <NavTeamLogo name={m.teams.name} logoUrl={m.teams.logo_url} size={20} />
+                    {m.teams.name}
+                  </Link>
+                ))}
                 {navLink('/profile', firstName ?? 'My Profile', true)}
                 <div style={{ borderTop: '1px solid rgba(196,130,42,0.2)', margin: '4px 0' }} />
                 <button
