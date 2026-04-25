@@ -910,25 +910,6 @@ export default function ProfilePage() {
                 )}
               </div>}
 
-              {/* ── Friends ── */}
-              <div style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(196,130,42,0.2)', borderRadius: '16px', padding: '24px' }}>
-                <h2 style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: '20px', letterSpacing: '0.05em', margin: '0 0 16px', color: '#f5edd6' }}>
-                  {partnerCount} <span style={{ color: '#c4822a' }}>Friend{partnerCount !== 1 ? 's' : ''}</span>
-                </h2>
-
-                {partnersList.length === 0 ? (
-                  <p style={{ fontSize: '13px', color: 'rgba(245,237,214,0.35)', fontFamily: "'Barlow', sans-serif", margin: 0 }}>
-                    No friends yet — send a Partner Up request to connect.
-                  </p>
-                ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                    {partnersList.map(person => (
-                      <FollowRow key={person.id} person={person} />
-                    ))}
-                  </div>
-                )}
-              </div>
-
             </div>
             {/* ════════════════════ END LEFT COLUMN ════════════════════ */}
 
@@ -997,6 +978,25 @@ export default function ProfilePage() {
             </div>
             {/* ════════════════════ END RIGHT COLUMN ════════════════════ */}
 
+          </div>
+
+          {/* ── Friends — full width ── */}
+          <div style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(196,130,42,0.2)', borderRadius: '16px', padding: '24px', marginTop: '28px' }}>
+            <h2 style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: '20px', letterSpacing: '0.05em', margin: '0 0 16px', color: '#f5edd6' }}>
+              {partnerCount} <span style={{ color: '#c4822a' }}>Friend{partnerCount !== 1 ? 's' : ''}</span>
+            </h2>
+
+            {partnersList.length === 0 ? (
+              <p style={{ fontSize: '13px', color: 'rgba(245,237,214,0.35)', fontFamily: "'Barlow', sans-serif", margin: 0 }}>
+                No friends yet — send a Partner Up request to connect.
+              </p>
+            ) : (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                {partnersList.map(person => (
+                  <FollowRow key={person.id} person={person} />
+                ))}
+              </div>
+            )}
           </div>
         </main>
       </div>
