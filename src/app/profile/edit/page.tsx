@@ -98,7 +98,6 @@ export default function ProfileEditPage() {
   const [coachingExperience, setCoachingExperience] = useState('')
   const [coachingOfferings, setCoachingOfferings] = useState<string[]>([])
   const [ageGroupsCoached, setAgeGroupsCoached] = useState<string[]>([])
-  const [coachingBio, setCoachingBio] = useState('')
 
   // Parent fields
   const [childPosition, setChildPosition] = useState('')
@@ -126,7 +125,7 @@ export default function ProfileEditPage() {
 
       const { data: profile } = await supabase
         .from('profiles')
-        .select('role, first_name, last_name, zip_code, bio, avatar_url, positions, highest_level, status, coaching_specialties, coaching_experience, coaching_offerings, age_groups_coached, coaching_bio, child_position, child_age_group, child_skill_level, parent_looking_for')
+        .select('role, first_name, last_name, zip_code, bio, avatar_url, positions, highest_level, status, coaching_specialties, coaching_experience, coaching_offerings, age_groups_coached, child_position, child_age_group, child_skill_level, parent_looking_for')
         .eq('id', session.user.id)
         .single()
 
@@ -145,7 +144,6 @@ export default function ProfileEditPage() {
         setCoachingExperience(profile.coaching_experience ?? '')
         setCoachingOfferings(profile.coaching_offerings ?? [])
         setAgeGroupsCoached(profile.age_groups_coached ?? [])
-        setCoachingBio(profile.coaching_bio ?? '')
         setChildPosition(profile.child_position ?? '')
         setChildAgeGroup(profile.child_age_group ?? '')
         setChildSkillLevel(profile.child_skill_level ?? '')
@@ -214,7 +212,6 @@ export default function ProfileEditPage() {
           coaching_experience: coachingExperience,
           coaching_offerings: coachingOfferings,
           age_groups_coached: ageGroupsCoached,
-          coaching_bio: coachingBio,
         } : {}),
         ...(isParent ? {
           child_position: childPosition,
@@ -397,10 +394,10 @@ export default function ProfileEditPage() {
                   <ChipSelect options={COACH_AGE_GROUPS} selected={ageGroupsCoached} onToggle={v => toggleChip(ageGroupsCoached, setAgeGroupsCoached, v)} />
                 </div>
                 <div>
-                  <label style={LABEL}>Coaching Bio</label>
+                  <label style={LABEL}>Bio</label>
                   <textarea
-                    value={coachingBio} onChange={e => setCoachingBio(e.target.value)}
-                    placeholder="Tell players and parents about your coaching philosophy and experience"
+                    value={bio} onChange={e => setBio(e.target.value)}
+                    placeholder="Tell players and parents about yourself, your coaching philosophy, and experience"
                     rows={4}
                     style={{ ...INPUT, resize: 'vertical', minHeight: '100px', lineHeight: '1.5' } as React.CSSProperties}
                     onFocus={focusBorder} onBlur={blurBorder}
@@ -442,17 +439,19 @@ export default function ProfileEditPage() {
               </>
             )}
 
-            {/* ── Bio (shared) ── */}
-            <div>
-              <label style={LABEL}>{bioLabel}</label>
-              <textarea
-                value={bio} onChange={e => setBio(e.target.value)}
-                placeholder={isParent ? 'Tell coaches and teams about your child...' : 'Tell the community about yourself...'}
-                rows={4}
-                style={{ ...INPUT, resize: 'vertical', minHeight: '100px', lineHeight: '1.5' } as React.CSSProperties}
-                onFocus={focusBorder} onBlur={blurBorder}
-              />
-            </div>
+            {/* ── Bio (player / parent only — coaches have it in their section) ── */}
+            {!isCoach && (
+              <div>
+                <label style={LABEL}>{bioLabel}</label>
+                <textarea
+                  value={bio} onChange={e => setBio(e.target.value)}
+                  placeholder={isParent ? 'Tell coaches and teams about your child...' : 'Tell the community about yourself...'}
+                  rows={4}
+                  style={{ ...INPUT, resize: 'vertical', minHeight: '100px', lineHeight: '1.5' } as React.CSSProperties}
+                  onFocus={focusBorder} onBlur={blurBorder}
+                />
+              </div>
+            )}
 
             {error && (
               <div style={{

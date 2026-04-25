@@ -95,7 +95,6 @@ function ProfileSetupInner() {
   const [coachingExperience, setCoachingExperience] = useState('')
   const [coachingOfferings, setCoachingOfferings] = useState<string[]>([])
   const [ageGroupsCoached, setAgeGroupsCoached] = useState<string[]>([])
-  const [coachingBio, setCoachingBio] = useState('')
 
   // Parent fields
   const [childPosition, setChildPosition] = useState('')
@@ -190,7 +189,6 @@ function ProfileSetupInner() {
           coaching_experience: coachingExperience,
           coaching_offerings: coachingOfferings,
           age_groups_coached: ageGroupsCoached,
-          coaching_bio: coachingBio,
         } : {}),
         ...(isParent ? {
           child_position: childPosition,
@@ -383,10 +381,10 @@ function ProfileSetupInner() {
                     <ChipSelect options={COACH_AGE_GROUPS} selected={ageGroupsCoached} onToggle={v => toggleChip(ageGroupsCoached, setAgeGroupsCoached, v)} />
                   </div>
                   <div>
-                    <label style={LABEL}>Coaching Bio</label>
+                    <label style={LABEL}>Bio</label>
                     <textarea
-                      value={coachingBio} onChange={e => setCoachingBio(e.target.value)}
-                      placeholder="Tell players and parents about your coaching philosophy and experience"
+                      value={bio} onChange={e => setBio(e.target.value)}
+                      placeholder="Tell players and parents about yourself, your coaching philosophy, and experience"
                       rows={4}
                       style={{ ...INPUT, resize: 'vertical', minHeight: '100px', lineHeight: '1.5' } as React.CSSProperties}
                       onFocus={focusBorder} onBlur={blurBorder}
@@ -428,17 +426,19 @@ function ProfileSetupInner() {
                 </>
               )}
 
-              {/* ── Bio (shared) ── */}
-              <div>
-                <label style={LABEL}>{bioLabel}</label>
-                <textarea
-                  value={bio} onChange={e => setBio(e.target.value)}
-                  placeholder={isParent ? 'Tell coaches and teams about your child...' : 'Tell the community about yourself...'}
-                  rows={4}
-                  style={{ ...INPUT, resize: 'vertical', minHeight: '100px', lineHeight: '1.5' } as React.CSSProperties}
-                  onFocus={focusBorder} onBlur={blurBorder}
-                />
-              </div>
+              {/* ── Bio (player / parent only — coaches have it in their section) ── */}
+              {!isCoach && (
+                <div>
+                  <label style={LABEL}>{bioLabel}</label>
+                  <textarea
+                    value={bio} onChange={e => setBio(e.target.value)}
+                    placeholder={isParent ? 'Tell coaches and teams about your child...' : 'Tell the community about yourself...'}
+                    rows={4}
+                    style={{ ...INPUT, resize: 'vertical', minHeight: '100px', lineHeight: '1.5' } as React.CSSProperties}
+                    onFocus={focusBorder} onBlur={blurBorder}
+                  />
+                </div>
+              )}
 
               {error && (
                 <div style={{
