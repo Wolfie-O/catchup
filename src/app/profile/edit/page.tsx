@@ -295,8 +295,8 @@ export default function ProfileEditPage() {
             </div>
           </div>
 
-          {/* ── Fields ── */}
-          <div style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(196,130,42,0.2)', borderRadius: '16px', padding: '32px 28px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          {/* ── Fields (shown once role is selected) ── */}
+          {role && <div style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(196,130,42,0.2)', borderRadius: '16px', padding: '32px 28px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
 
             {/* Photo */}
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
@@ -477,7 +477,7 @@ export default function ProfileEditPage() {
             >
               {loading ? 'Saving…' : 'Save Changes'}
             </button>
-          </div>
+          </div>}
         </form>
       </main>
     </div>
