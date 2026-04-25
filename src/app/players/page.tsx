@@ -847,13 +847,11 @@ function CommunityCard({
   const [requesting, setRequesting] = useState(false)
   const [partnerStatus, setPartnerStatus] = useState<PartnerStatus>(initialPartnerStatus)
   const [partnerLoading, setPartnerLoading] = useState(false)
-  const age = calculateAge(player.date_of_birth)
   const isVerified = (player.vouches ?? 0) >= 3
   const fullName = [player.first_name, player.last_name].filter(Boolean).join(' ') || 'Unknown'
-  const locationLabel = distanceMi !== null
+  const meta = distanceMi !== null
     ? `📍 ${distanceMi.toFixed(1)} mi away`
     : player.zip_code ? `📍 ${player.zip_code}` : null
-  const meta = [age ? `${age} yrs` : null, locationLabel].filter(Boolean).join(' · ')
 
   const role = player.role
   const isPlayer = role === 'player' || role === 'both' || !role
@@ -1021,9 +1019,14 @@ function CommunityCard({
               {player.coaching_specialties.slice(0, 3).map(miniChip)}
             </div>
           )}
-          {(player.coaching_experience || (player.coaching_offerings && player.coaching_offerings.length > 0)) && (
+          {player.coaching_experience && (
             <div style={{ fontSize: '12px', color: 'rgba(245,237,214,0.5)', fontFamily: "'Barlow', sans-serif" }}>
-              {[player.coaching_experience, ...(player.coaching_offerings?.slice(0, 2) ?? [])].filter(Boolean).join(' · ')}
+              {player.coaching_experience} exp{player.coaching_offerings && player.coaching_offerings.length > 0 ? ' · ' + player.coaching_offerings.slice(0, 2).join(' · ') : ''}
+            </div>
+          )}
+          {!player.coaching_experience && player.coaching_offerings && player.coaching_offerings.length > 0 && (
+            <div style={{ fontSize: '12px', color: 'rgba(245,237,214,0.5)', fontFamily: "'Barlow', sans-serif" }}>
+              {player.coaching_offerings.slice(0, 2).join(' · ')}
             </div>
           )}
         </>
@@ -1071,7 +1074,7 @@ function CommunityCard({
             transition: 'background 0.15s',
           }}
         >
-          {requesting ? '…' : 'Play Catch'}
+          {requesting ? '…' : (isPlayer ? 'Play Catch' : 'Connect')}
         </button>
         <button
           onClick={e => { e.stopPropagation(); onToast('Vouch feature coming soon!', 'info') }}
