@@ -33,6 +33,15 @@ type Profile = {
   bio: string | null
   avatar_url: string | null
   vouches: number | null
+  role: string | null
+  coaching_specialties: string[] | null
+  coaching_experience: string | null
+  coaching_offerings: string[] | null
+  age_groups_coached: string[] | null
+  child_position: string | null
+  child_age_group: string | null
+  child_skill_level: string | null
+  parent_looking_for: string[] | null
 }
 
 type PlayingHistory = {
@@ -289,7 +298,7 @@ export default function ProfilePage() {
     if (!userId) return
     supabase
       .from('profiles')
-      .select('id, first_name, last_name, date_of_birth, zip_code, positions, highest_level, status, bio, avatar_url, vouches')
+      .select('id, first_name, last_name, date_of_birth, zip_code, positions, highest_level, status, bio, avatar_url, vouches, role, coaching_specialties, coaching_experience, coaching_offerings, age_groups_coached, child_position, child_age_group, child_skill_level, parent_looking_for')
       .eq('id', userId)
       .single()
       .then(({ data }) => {
@@ -583,236 +592,167 @@ export default function ProfilePage() {
               {/* ── Profile card ── */}
               <div style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(196,130,42,0.2)', borderRadius: '16px', padding: '28px 24px' }}>
 
-                {editMode ? (
-                  /* ── Edit form ── */
-                  <div>
-                    {/* Avatar upload */}
-                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '22px' }}>
-                      <button
-                        type="button"
-                        onClick={() => fileInputRef.current?.click()}
-                        style={{
-                          width: 96, height: 96, borderRadius: '50%', padding: 0, overflow: 'hidden',
-                          border: '2px dashed rgba(196,130,42,0.5)', background: 'transparent',
-                          cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        }}
-                      >
-                        {editAvatarPreview || profile.avatar_url ? (
-                          <img src={editAvatarPreview ?? profile.avatar_url!} alt="Avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                        ) : (
-                          <div style={{ width: '100%', height: '100%', background: '#c4822a', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Bebas Neue', sans-serif", fontSize: 34, color: '#0d1f3c' }}>
-                            {getInitials(editFirstName, editLastName)}
-                          </div>
+                {/* ── Profile view ── */}
+                <div>
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', marginBottom: '20px' }}>
+                    <Avatar url={profile.avatar_url} first={profile.first_name} last={profile.last_name} size={120} />
+
+                    <div style={{ marginTop: '16px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                        <h1 style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: '30px', letterSpacing: '0.05em', margin: 0, lineHeight: 1, color: '#f5edd6' }}>
+                          {fullName}
+                        </h1>
+                        {isVerified && (
+                          <span style={{
+                            fontSize: '10px', fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700,
+                            letterSpacing: '0.06em', color: '#f0b429',
+                            background: 'rgba(240,180,41,0.1)', border: '1px solid rgba(240,180,41,0.3)',
+                            borderRadius: '4px', padding: '2px 6px',
+                          }}>
+                            ★ Verified
+                          </span>
                         )}
-                      </button>
-                      <span style={{ marginTop: '8px', fontSize: '11px', fontFamily: "'Barlow Condensed', sans-serif", color: 'rgba(245,237,214,0.4)', letterSpacing: '0.06em' }}>
-                        Click to change photo
-                      </span>
-                      <input ref={fileInputRef} type="file" accept="image/*" style={{ display: 'none' }}
-                        onChange={e => {
-                          const f = e.target.files?.[0]; if (!f) return
-                          setEditAvatarFile(f)
-                          setEditAvatarPreview(URL.createObjectURL(f))
-                        }}
-                      />
-                    </div>
-
-                    {/* Name */}
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '10px' }}>
-                      <div>
-                        <label style={LABEL}>First Name</label>
-                        <input type="text" value={editFirstName} onChange={e => setEditFirstName(e.target.value)} style={INPUT} onFocus={focusBorder} onBlur={blurBorder} />
                       </div>
-                      <div>
-                        <label style={LABEL}>Last Name</label>
-                        <input type="text" value={editLastName} onChange={e => setEditLastName(e.target.value)} style={INPUT} onFocus={focusBorder} onBlur={blurBorder} />
-                      </div>
-                    </div>
 
-                    {/* DOB + Zip */}
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '10px' }}>
-                      <div>
-                        <label style={LABEL}>Date of Birth</label>
-                        <input type="date" value={editDob} onChange={e => setEditDob(e.target.value)} style={{ ...INPUT, colorScheme: 'dark' } as React.CSSProperties} onFocus={focusBorder} onBlur={blurBorder} />
-                      </div>
-                      <div>
-                        <label style={LABEL}>Zip Code</label>
-                        <input type="text" value={editZip} onChange={e => setEditZip(e.target.value.replace(/\D/g, '').slice(0, 5))} maxLength={5} placeholder="12345" style={INPUT} onFocus={focusBorder} onBlur={blurBorder} />
-                      </div>
-                    </div>
-
-                    {/* Positions */}
-                    <div style={{ marginBottom: '12px' }}>
-                      <label style={LABEL}>Positions</label>
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                        {POSITIONS.map(pos => {
-                          const active = editPositions.includes(pos)
-                          return (
-                            <button key={pos} type="button" onClick={() => toggleEditPosition(pos)} style={{
-                              padding: '5px 12px', borderRadius: '99px', fontSize: '12px', cursor: 'pointer',
-                              fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, letterSpacing: '0.08em',
-                              border: active ? '1px solid #c4822a' : '1px solid rgba(245,237,214,0.2)',
-                              background: active ? '#c4822a' : 'rgba(255,255,255,0.04)',
-                              color: active ? '#0d1f3c' : 'rgba(245,237,214,0.65)',
-                              transition: 'all 0.12s',
-                            }}>
-                              {pos}
-                            </button>
-                          )
-                        })}
-                      </div>
-                    </div>
-
-                    {/* Level + Status */}
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '10px' }}>
-                      <div>
-                        <label style={LABEL}>Highest Level</label>
-                        <select value={editLevel} onChange={e => setEditLevel(e.target.value)} style={{ ...SELECT, width: '100%' }} onFocus={focusBorder} onBlur={blurBorder}>
-                          <option value="" style={{ background: '#0d1f3c' }}>Select…</option>
-                          {LEVELS.map(l => <option key={l} value={l} style={{ background: '#0d1f3c' }}>{l}</option>)}
-                        </select>
-                      </div>
-                      <div>
-                        <label style={LABEL}>Status</label>
-                        <select value={editStatus} onChange={e => setEditStatus(e.target.value)} style={{ ...SELECT, width: '100%' }} onFocus={focusBorder} onBlur={blurBorder}>
-                          <option value="" style={{ background: '#0d1f3c' }}>Select…</option>
-                          <option value="Current" style={{ background: '#0d1f3c' }}>Current</option>
-                          <option value="Washed Up" style={{ background: '#0d1f3c' }}>Washed Up</option>
-                        </select>
-                      </div>
-                    </div>
-
-                    {/* Bio */}
-                    <div style={{ marginBottom: '18px' }}>
-                      <label style={LABEL}>Bio</label>
-                      <textarea
-                        value={editBio}
-                        onChange={e => setEditBio(e.target.value)}
-                        rows={4}
-                        placeholder="Tell the community about yourself..."
-                        style={{ ...INPUT, resize: 'vertical', minHeight: '90px', lineHeight: '1.5' } as React.CSSProperties}
-                        onFocus={focusBorder}
-                        onBlur={blurBorder}
-                      />
-                    </div>
-
-                    {/* Buttons */}
-                    <div style={{ display: 'flex', gap: '10px' }}>
-                      <button
-                        onClick={saveProfile}
-                        disabled={saving}
-                        style={{
-                          flex: 1, padding: '10px', borderRadius: '8px', border: 'none',
-                          background: saving ? 'rgba(196,130,42,0.5)' : '#c4822a',
-                          color: '#0d1f3c', fontFamily: "'Barlow Condensed', sans-serif",
-                          fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase',
-                          fontSize: '13px', cursor: saving ? 'not-allowed' : 'pointer',
-                          transition: 'background 0.15s',
-                        }}
-                      >
-                        {saving ? 'Saving…' : 'Save Changes'}
-                      </button>
-                      <button
-                        onClick={() => setEditMode(false)}
-                        style={{
-                          padding: '10px 16px', borderRadius: '8px',
-                          background: 'transparent', border: '1px solid rgba(245,237,214,0.2)',
-                          color: 'rgba(245,237,214,0.6)', fontFamily: "'Barlow Condensed', sans-serif",
-                          fontWeight: 700, letterSpacing: '0.08em', fontSize: '13px', cursor: 'pointer',
-                        }}
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  </div>
-
-                ) : (
-                  /* ── Profile view ── */
-                  <div>
-                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', marginBottom: '20px' }}>
-                      <Avatar url={profile.avatar_url} first={profile.first_name} last={profile.last_name} size={120} />
-
-                      <div style={{ marginTop: '16px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                          <h1 style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: '30px', letterSpacing: '0.05em', margin: 0, lineHeight: 1, color: '#f5edd6' }}>
-                            {fullName}
-                          </h1>
-                          {isVerified && (
-                            <span style={{
-                              fontSize: '10px', fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700,
-                              letterSpacing: '0.06em', color: '#f0b429',
-                              background: 'rgba(240,180,41,0.1)', border: '1px solid rgba(240,180,41,0.3)',
-                              borderRadius: '4px', padding: '2px 6px',
-                            }}>
-                              ★ Verified
+                      {/* Role badges */}
+                      {profile.role && (
+                        <div style={{ display: 'flex', gap: '6px', justifyContent: 'center', marginTop: '8px', flexWrap: 'wrap' }}>
+                          {(profile.role === 'player' || profile.role === 'both') && (
+                            <span style={{ fontSize: '11px', fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, letterSpacing: '0.06em', color: '#63b3ed', background: 'rgba(99,179,237,0.12)', border: '1px solid rgba(99,179,237,0.35)', borderRadius: '4px', padding: '2px 8px' }}>
+                              Player
+                            </span>
+                          )}
+                          {(profile.role === 'coach' || profile.role === 'both') && (
+                            <span style={{ fontSize: '11px', fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, letterSpacing: '0.06em', color: '#c4822a', background: 'rgba(196,130,42,0.12)', border: '1px solid rgba(196,130,42,0.4)', borderRadius: '4px', padding: '2px 8px' }}>
+                              Coach
+                            </span>
+                          )}
+                          {profile.role === 'parent' && (
+                            <span style={{ fontSize: '11px', fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, letterSpacing: '0.06em', color: '#68d391', background: 'rgba(104,211,145,0.12)', border: '1px solid rgba(104,211,145,0.35)', borderRadius: '4px', padding: '2px 8px' }}>
+                              Parent
                             </span>
                           )}
                         </div>
+                      )}
 
-                        {/* Catch Partners count */}
-                        <div style={{ marginTop: '10px' }}>
-                          <span style={{
-                            fontFamily: "'Barlow Condensed', sans-serif", fontSize: '13px',
-                            letterSpacing: '0.04em', color: 'rgba(245,237,214,0.55)',
-                          }}>
-                            <strong style={{ fontWeight: 700, color: '#f5edd6' }}>{partnerCount}</strong>{' '}
-                            Catch Partner{partnerCount !== 1 ? 's' : ''}
-                          </span>
-                        </div>
-
-                        {(profile.highest_level || profile.status) && (
-                          <p style={{ margin: '10px 0 0', fontSize: '13px', color: 'rgba(245,237,214,0.5)', fontFamily: "'Barlow', sans-serif" }}>
-                            {[profile.highest_level, profile.status].filter(Boolean).join(' · ')}
-                          </p>
-                        )}
-
-                        {cityName && (
-                          <p style={{ margin: '4px 0 0', fontSize: '13px', color: 'rgba(245,237,214,0.4)', fontFamily: "'Barlow', sans-serif" }}>
-                            📍 {cityName}
-                          </p>
-                        )}
+                      {/* Catch Partners count */}
+                      <div style={{ marginTop: '10px' }}>
+                        <span style={{
+                          fontFamily: "'Barlow Condensed', sans-serif", fontSize: '13px',
+                          letterSpacing: '0.04em', color: 'rgba(245,237,214,0.55)',
+                        }}>
+                          <strong style={{ fontWeight: 700, color: '#f5edd6' }}>{partnerCount}</strong>{' '}
+                          Catch Partner{partnerCount !== 1 ? 's' : ''}
+                        </span>
                       </div>
+
+                      {cityName && (
+                        <p style={{ margin: '6px 0 0', fontSize: '13px', color: 'rgba(245,237,214,0.4)', fontFamily: "'Barlow', sans-serif" }}>
+                          📍 {cityName}
+                        </p>
+                      )}
                     </div>
-
-                    {/* Position pills */}
-                    {profile.positions && profile.positions.length > 0 && (
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', justifyContent: 'center', marginBottom: '16px' }}>
-                        {profile.positions.map(pos => (
-                          <span key={pos} style={{
-                            padding: '3px 12px', borderRadius: '99px', fontSize: '12px',
-                            fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, letterSpacing: '0.08em',
-                            border: '1px solid rgba(196,130,42,0.45)', color: '#c4822a',
-                            background: 'rgba(196,130,42,0.1)',
-                          }}>
-                            {pos}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-
-                    {/* Bio */}
-                    {profile.bio && (
-                      <p style={{ fontSize: '14px', lineHeight: '1.65', color: 'rgba(245,237,214,0.7)', fontFamily: "'Barlow', sans-serif", margin: '0 0 20px', textAlign: 'center' }}>
-                        {profile.bio}
-                      </p>
-                    )}
-
-                    <button
-                      onClick={enterEditMode}
-                      style={{
-                        width: '100%', padding: '9px', borderRadius: '8px',
-                        background: 'transparent', border: '1px solid rgba(196,130,42,0.5)',
-                        color: '#c4822a', fontFamily: "'Barlow Condensed', sans-serif",
-                        fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase',
-                        fontSize: '13px', cursor: 'pointer', transition: 'background 0.15s',
-                      }}
-                      onMouseEnter={e => { e.currentTarget.style.background = 'rgba(196,130,42,0.1)' }}
-                      onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
-                    >
-                      Edit Profile
-                    </button>
                   </div>
-                )}
+
+                  {/* ── Player / Both fields ── */}
+                  {(profile.role === 'player' || profile.role === 'both') && (
+                    <>
+                      {profile.positions && profile.positions.length > 0 && (
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', justifyContent: 'center', marginBottom: '10px' }}>
+                          {profile.positions.map(pos => (
+                            <span key={pos} style={{
+                              padding: '3px 12px', borderRadius: '99px', fontSize: '12px',
+                              fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, letterSpacing: '0.08em',
+                              border: '1px solid rgba(196,130,42,0.45)', color: '#c4822a',
+                              background: 'rgba(196,130,42,0.1)',
+                            }}>
+                              {pos}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                      {(profile.highest_level || profile.status) && (
+                        <p style={{ margin: '0 0 10px', fontSize: '13px', color: 'rgba(245,237,214,0.5)', fontFamily: "'Barlow', sans-serif", textAlign: 'center' }}>
+                          {[profile.highest_level, profile.status].filter(Boolean).join(' · ')}
+                        </p>
+                      )}
+                    </>
+                  )}
+
+                  {/* ── Coach / Both fields ── */}
+                  {(profile.role === 'coach' || profile.role === 'both') && (
+                    <div style={{ marginBottom: '10px', textAlign: 'center' }}>
+                      {profile.coaching_specialties && profile.coaching_specialties.length > 0 && (
+                        <div style={{ marginBottom: '8px' }}>
+                          <div style={{ fontSize: '11px', fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, letterSpacing: '0.08em', color: 'rgba(245,237,214,0.35)', textTransform: 'uppercase', marginBottom: '5px' }}>Specialties</div>
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', justifyContent: 'center' }}>
+                            {profile.coaching_specialties.map(s => (
+                              <span key={s} style={{ padding: '2px 10px', borderRadius: '99px', fontSize: '11px', fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, letterSpacing: '0.06em', border: '1px solid rgba(196,130,42,0.35)', color: '#c4822a', background: 'rgba(196,130,42,0.08)' }}>
+                                {s}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {profile.coaching_experience && (
+                        <p style={{ margin: '0 0 4px', fontSize: '13px', color: 'rgba(245,237,214,0.5)', fontFamily: "'Barlow', sans-serif" }}>
+                          {profile.coaching_experience} experience
+                        </p>
+                      )}
+                      {profile.coaching_offerings && profile.coaching_offerings.length > 0 && (
+                        <p style={{ margin: '0 0 4px', fontSize: '13px', color: 'rgba(245,237,214,0.5)', fontFamily: "'Barlow', sans-serif" }}>
+                          Offers: {profile.coaching_offerings.join(', ')}
+                        </p>
+                      )}
+                      {profile.age_groups_coached && profile.age_groups_coached.length > 0 && (
+                        <p style={{ margin: '0 0 4px', fontSize: '13px', color: 'rgba(245,237,214,0.5)', fontFamily: "'Barlow', sans-serif" }}>
+                          Ages: {profile.age_groups_coached.join(', ')}
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  {/* ── Parent fields ── */}
+                  {profile.role === 'parent' && (
+                    <div style={{ marginBottom: '10px', textAlign: 'center' }}>
+                      {profile.child_age_group && (
+                        <p style={{ margin: '0 0 4px', fontSize: '13px', color: 'rgba(245,237,214,0.5)', fontFamily: "'Barlow', sans-serif" }}>
+                          Child Age Group: {profile.child_age_group}
+                        </p>
+                      )}
+                      {(profile.child_position || profile.child_skill_level) && (
+                        <p style={{ margin: '0 0 4px', fontSize: '13px', color: 'rgba(245,237,214,0.5)', fontFamily: "'Barlow', sans-serif" }}>
+                          {[profile.child_position, profile.child_skill_level].filter(Boolean).join(' · ')}
+                        </p>
+                      )}
+                      {profile.parent_looking_for && profile.parent_looking_for.length > 0 && (
+                        <p style={{ margin: '0 0 4px', fontSize: '13px', color: 'rgba(245,237,214,0.5)', fontFamily: "'Barlow', sans-serif" }}>
+                          Looking for: {profile.parent_looking_for.join(', ')}
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Bio */}
+                  {profile.bio && (
+                    <p style={{ fontSize: '14px', lineHeight: '1.65', color: 'rgba(245,237,214,0.7)', fontFamily: "'Barlow', sans-serif", margin: '0 0 20px', textAlign: 'center' }}>
+                      {profile.bio}
+                    </p>
+                  )}
+
+                  <a
+                    href="/profile/edit"
+                    style={{
+                      display: 'block', textAlign: 'center', padding: '10px 24px', borderRadius: '8px',
+                      background: '#c4822a', color: '#0d1f3c',
+                      fontFamily: "'Barlow Condensed', sans-serif",
+                      fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase',
+                      fontSize: '14px', textDecoration: 'none',
+                    }}
+                  >
+                    Edit Profile
+                  </a>
+                </div>
               </div>
 
               {/* ── Where I've Played ── */}
