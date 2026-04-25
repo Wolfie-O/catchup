@@ -90,7 +90,7 @@ export default function Nav() {
 
       {/* ── Desktop (md and above) ── */}
       <div className="hidden md:flex items-center gap-1">
-        {userId && navLink('/players', 'Players')}
+        {userId && navLink('/players', 'Community')}
         {userId && navLink('/feed', 'Feed')}
         {userId && navLink('/teams', 'Teams')}
         <div className="flex items-center gap-2 ml-2">
@@ -177,7 +177,7 @@ export default function Nav() {
                 boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
                 zIndex: 100,
               }}>
-                {navLink('/players', 'Players', true)}
+                {navLink('/players', 'Community', true)}
                 {navLink('/feed', 'Feed', true)}
                 {navLink('/teams', 'Teams', true)}
                 {navLink('/profile', firstName ?? 'My Profile', true)}

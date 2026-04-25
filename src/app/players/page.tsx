@@ -20,6 +20,16 @@ type Profile = {
   bio: string | null
   avatar_url: string | null
   vouches: number | null
+  role: string | null
+  coaching_specialties: string[] | null
+  coaching_experience: string | null
+  coaching_offerings: string[] | null
+  age_groups_coached: string[] | null
+  coaching_bio: string | null
+  child_age_group: string | null
+  child_position: string | null
+  child_skill_level: string | null
+  parent_looking_for: string[] | null
 }
 
 type PlayingHistory = {
@@ -44,6 +54,7 @@ type ModalPost = {
 
 type PartnerStatus = 'none' | 'pending' | 'accepted'
 type Toast = { id: number; message: string; type: 'success' | 'info' }
+type RoleTab = 'all' | 'players' | 'coaches' | 'parents'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -163,6 +174,33 @@ function onBlurBorder(e: React.FocusEvent<HTMLInputElement | HTMLSelectElement>)
   e.currentTarget.style.borderColor = 'rgba(245,237,214,0.15)'
 }
 
+// ── Role badge ────────────────────────────────────────────────────────────────
+
+function RoleBadge({ role }: { role: string }) {
+  if (role === 'player') return (
+    <span style={{ fontSize: '10px', fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, letterSpacing: '0.06em', color: '#63b3ed', background: 'rgba(99,179,237,0.1)', border: '1px solid rgba(99,179,237,0.3)', borderRadius: '4px', padding: '2px 6px' }}>
+      Player
+    </span>
+  )
+  if (role === 'coach') return (
+    <span style={{ fontSize: '10px', fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, letterSpacing: '0.06em', color: '#c4822a', background: 'rgba(196,130,42,0.15)', border: '1px solid rgba(196,130,42,0.4)', borderRadius: '4px', padding: '2px 6px' }}>
+      Coach
+    </span>
+  )
+  if (role === 'parent') return (
+    <span style={{ fontSize: '10px', fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, letterSpacing: '0.06em', color: '#68d391', background: 'rgba(104,211,145,0.1)', border: '1px solid rgba(104,211,145,0.3)', borderRadius: '4px', padding: '2px 6px' }}>
+      Parent
+    </span>
+  )
+  if (role === 'both') return (
+    <span style={{ display: 'inline-flex', gap: '4px' }}>
+      <span style={{ fontSize: '10px', fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, letterSpacing: '0.06em', color: '#63b3ed', background: 'rgba(99,179,237,0.1)', border: '1px solid rgba(99,179,237,0.3)', borderRadius: '4px', padding: '2px 6px' }}>Player</span>
+      <span style={{ fontSize: '10px', fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, letterSpacing: '0.06em', color: '#c4822a', background: 'rgba(196,130,42,0.15)', border: '1px solid rgba(196,130,42,0.4)', borderRadius: '4px', padding: '2px 6px' }}>Coach</span>
+    </span>
+  )
+  return null
+}
+
 // ── Toast container ───────────────────────────────────────────────────────────
 
 function ToastContainer({ toasts }: { toasts: Toast[] }) {
@@ -242,7 +280,7 @@ function Avatar({ url, first, last, size = 56 }: {
   )
 }
 
-// ── Partner Up button (shared style) ─────────────────────────────────────────
+// ── Partner Up button ─────────────────────────────────────────────────────────
 
 function PartnerButton({
   status, loading, onClick, small = false,
@@ -357,6 +395,9 @@ function PlayerModal({
 
   const fullName = [player.first_name, player.last_name].filter(Boolean).join(' ') || 'Unknown Player'
   const isVerified = (player.vouches ?? 0) >= 3
+  const isCoach = player.role === 'coach' || player.role === 'both'
+  const isPlayer = player.role === 'player' || player.role === 'both' || !player.role
+  const isParent = player.role === 'parent'
 
   useEffect(() => {
     requestAnimationFrame(() => setVisible(true))
@@ -427,7 +468,6 @@ function PlayerModal({
         setExistingRequest(existing[0].status as 'pending' | 'accepted')
       }
 
-      // Check partner status
       const { data: followData } = await supabase
         .from('follows')
         .select('status')
@@ -474,6 +514,17 @@ function PlayerModal({
 
   const isPending  = existingRequest === 'pending'
   const isAccepted = existingRequest === 'accepted'
+
+  const chip = (label: string, key: string) => (
+    <span key={key} style={{
+      padding: '4px 12px', borderRadius: '99px', fontSize: '12px',
+      fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, letterSpacing: '0.06em',
+      border: '1px solid rgba(245,237,214,0.2)', color: 'rgba(245,237,214,0.7)',
+      background: 'rgba(255,255,255,0.05)',
+    }}>
+      {label}
+    </span>
+  )
 
   return (
     <div
@@ -540,9 +591,10 @@ function PlayerModal({
                     ★ Verified
                   </span>
                 )}
+                {player.role && <RoleBadge role={player.role} />}
               </div>
 
-              {(player.highest_level || player.status) && (
+              {isPlayer && (player.highest_level || player.status) && (
                 <p style={{ margin: '6px 0 0', fontSize: '14px', color: 'rgba(245,237,214,0.55)', fontFamily: "'Barlow', sans-serif" }}>
                   {[player.highest_level, player.status].filter(Boolean).join(' · ')}
                 </p>
@@ -564,7 +616,6 @@ function PlayerModal({
                 )}
               </div>
 
-              {/* Partner Up button */}
               <div style={{ marginTop: '14px' }}>
                 <PartnerButton
                   status={partnerStatus}
@@ -575,8 +626,8 @@ function PlayerModal({
             </div>
           </div>
 
-          {/* Position pills */}
-          {player.positions && player.positions.length > 0 && (
+          {/* Position pills (player/both) */}
+          {isPlayer && player.positions && player.positions.length > 0 && (
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', justifyContent: 'center', marginBottom: '18px' }}>
               {player.positions.map(pos => (
                 <span key={pos} style={{
@@ -600,6 +651,73 @@ function PlayerModal({
 
           <div style={{ height: '1px', background: 'rgba(196,130,42,0.15)', marginBottom: '24px' }} />
 
+          {/* ── Coach section ── */}
+          {isCoach && (player.coaching_specialties?.length || player.coaching_experience || player.coaching_offerings?.length || player.age_groups_coached?.length || player.coaching_bio) && (
+            <div style={{ marginBottom: '28px' }}>
+              <h3 style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: '20px', letterSpacing: '0.05em', margin: '0 0 14px', color: '#f5edd6' }}>
+                <span style={{ color: '#c4822a' }}>Coaching</span> Info
+              </h3>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                {player.coaching_specialties && player.coaching_specialties.length > 0 && (
+                  <div>
+                    <div style={{ fontSize: '11px', fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'rgba(245,237,214,0.4)', marginBottom: '6px' }}>Specialties</div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                      {player.coaching_specialties.map(s => chip(s, s))}
+                    </div>
+                  </div>
+                )}
+                {player.coaching_experience && (
+                  <div style={{ fontSize: '13px', color: 'rgba(245,237,214,0.6)', fontFamily: "'Barlow', sans-serif" }}>
+                    <span style={{ color: 'rgba(245,237,214,0.4)', fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', fontSize: '11px', marginRight: '8px' }}>Experience</span>
+                    {player.coaching_experience}
+                  </div>
+                )}
+                {player.coaching_offerings && player.coaching_offerings.length > 0 && (
+                  <div>
+                    <div style={{ fontSize: '11px', fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'rgba(245,237,214,0.4)', marginBottom: '6px' }}>What I Offer</div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                      {player.coaching_offerings.map(o => chip(o, o))}
+                    </div>
+                  </div>
+                )}
+                {player.age_groups_coached && player.age_groups_coached.length > 0 && (
+                  <div>
+                    <div style={{ fontSize: '11px', fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'rgba(245,237,214,0.4)', marginBottom: '6px' }}>Age Groups</div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                      {player.age_groups_coached.map(g => chip(g, g))}
+                    </div>
+                  </div>
+                )}
+                {player.coaching_bio && (
+                  <p style={{ margin: 0, fontSize: '13px', lineHeight: '1.6', color: 'rgba(245,237,214,0.65)', fontFamily: "'Barlow', sans-serif", padding: '12px 14px', background: 'rgba(255,255,255,0.04)', borderRadius: '8px', border: '1px solid rgba(245,237,214,0.07)' }}>
+                    {player.coaching_bio}
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* ── Parent section ── */}
+          {isParent && (player.child_position || player.child_age_group || player.child_skill_level || player.parent_looking_for?.length) && (
+            <div style={{ marginBottom: '28px' }}>
+              <h3 style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: '20px', letterSpacing: '0.05em', margin: '0 0 14px', color: '#f5edd6' }}>
+                <span style={{ color: '#c4822a' }}>Looking</span> For
+              </h3>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                {(player.child_position || player.child_age_group || player.child_skill_level) && (
+                  <div style={{ fontSize: '13px', color: 'rgba(245,237,214,0.65)', fontFamily: "'Barlow', sans-serif" }}>
+                    Child: {[player.child_position, player.child_age_group, player.child_skill_level].filter(Boolean).join(' · ')}
+                  </div>
+                )}
+                {player.parent_looking_for && player.parent_looking_for.length > 0 && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                    {player.parent_looking_for.map(l => chip(l, l))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           {loading ? (
             <div style={{ display: 'flex', justifyContent: 'center', padding: '32px 0' }}>
               <div style={{ width: 28, height: 28, borderRadius: '50%', border: '3px solid rgba(196,130,42,0.2)', borderTopColor: '#c4822a', animation: 'spin 0.7s linear infinite' }} />
@@ -609,7 +727,7 @@ function PlayerModal({
               {history.length > 0 && (
                 <div style={{ marginBottom: '28px' }}>
                   <h3 style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: '20px', letterSpacing: '0.05em', margin: '0 0 12px', color: '#f5edd6' }}>
-                    Where They've <span style={{ color: '#c4822a' }}>Played</span>
+                    Where They&apos;ve <span style={{ color: '#c4822a' }}>Played</span>
                   </h3>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                     {history.map(entry => (
@@ -724,9 +842,9 @@ function PlayerModal({
   )
 }
 
-// ── Player card ───────────────────────────────────────────────────────────────
+// ── Community card ────────────────────────────────────────────────────────────
 
-function PlayerCard({
+function CommunityCard({
   player, currentUserId, userZip, distanceMi, onToast, onOpenModal, initialPartnerStatus,
 }: {
   player: Profile
@@ -742,11 +860,16 @@ function PlayerCard({
   const [partnerLoading, setPartnerLoading] = useState(false)
   const age = calculateAge(player.date_of_birth)
   const isVerified = (player.vouches ?? 0) >= 3
-  const fullName = [player.first_name, player.last_name].filter(Boolean).join(' ') || 'Unknown Player'
+  const fullName = [player.first_name, player.last_name].filter(Boolean).join(' ') || 'Unknown'
   const locationLabel = distanceMi !== null
     ? `📍 ${distanceMi.toFixed(1)} mi away`
     : player.zip_code ? `📍 ${player.zip_code}` : null
   const meta = [age ? `${age} yrs` : null, locationLabel].filter(Boolean).join(' · ')
+
+  const role = player.role
+  const isPlayer = role === 'player' || role === 'both' || !role
+  const isCoach = role === 'coach' || role === 'both'
+  const isParent = role === 'parent'
 
   async function handlePlayCatch(e: React.MouseEvent) {
     e.stopPropagation()
@@ -763,7 +886,7 @@ function PlayerCard({
 
       if (checkError) { onToast('Something went wrong. Try again.', 'info'); return }
       if (existing && existing.length > 0) {
-        onToast(`You already have an active request with ${player.first_name || 'this player'}!`, 'info')
+        onToast(`You already have an active request with ${player.first_name || 'this person'}!`, 'info')
         return
       }
       const { error } = await supabase.from('catch_requests').insert({
@@ -794,6 +917,17 @@ function PlayerCard({
     }
     setPartnerLoading(false)
   }
+
+  const miniChip = (label: string) => (
+    <span key={label} style={{
+      padding: '3px 9px', borderRadius: '99px', fontSize: '11px',
+      fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, letterSpacing: '0.06em',
+      border: '1px solid rgba(245,237,214,0.18)', color: 'rgba(245,237,214,0.6)',
+      background: 'rgba(255,255,255,0.05)',
+    }}>
+      {label}
+    </span>
+  )
 
   return (
     <div
@@ -827,6 +961,7 @@ function PlayerCard({
                     ★ Verified
                   </span>
                 )}
+                {role && <RoleBadge role={role} />}
               </div>
               {meta && (
                 <div style={{ fontSize: '12px', color: 'rgba(245,237,214,0.45)', marginTop: '3px', fontFamily: "'Barlow', sans-serif" }}>
@@ -834,53 +969,106 @@ function PlayerCard({
                 </div>
               )}
             </div>
-            {/* Partner Up pill button */}
-            <PartnerButton
-              status={partnerStatus}
-              loading={partnerLoading}
-              onClick={handlePartnerUp}
-              small
-            />
+            <PartnerButton status={partnerStatus} loading={partnerLoading} onClick={handlePartnerUp} small />
           </div>
         </div>
       </div>
 
-      {/* Position pills */}
-      {player.positions && player.positions.length > 0 && (
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
-          {player.positions.map(pos => (
-            <span key={pos} style={{
-              padding: '3px 10px', borderRadius: '99px', fontSize: '12px',
-              fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, letterSpacing: '0.08em',
-              border: '1px solid rgba(196,130,42,0.45)', color: '#c4822a',
-              background: 'rgba(196,130,42,0.1)',
-            }}>
-              {pos}
-            </span>
-          ))}
-        </div>
+      {/* ── Player content ── */}
+      {isPlayer && !isCoach && (
+        <>
+          {player.positions && player.positions.length > 0 && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+              {player.positions.map(pos => (
+                <span key={pos} style={{
+                  padding: '3px 10px', borderRadius: '99px', fontSize: '12px',
+                  fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, letterSpacing: '0.08em',
+                  border: '1px solid rgba(196,130,42,0.45)', color: '#c4822a',
+                  background: 'rgba(196,130,42,0.1)',
+                }}>
+                  {pos}
+                </span>
+              ))}
+            </div>
+          )}
+          {(player.highest_level || player.status) && (
+            <div style={{ fontSize: '12px', color: 'rgba(245,237,214,0.5)', fontFamily: "'Barlow', sans-serif" }}>
+              {[player.highest_level, player.status].filter(Boolean).join(' · ')}
+            </div>
+          )}
+        </>
       )}
 
-      {/* Level + status */}
-      {(player.highest_level || player.status) && (
-        <div style={{ fontSize: '12px', color: 'rgba(245,237,214,0.5)', fontFamily: "'Barlow', sans-serif" }}>
-          {[player.highest_level, player.status].filter(Boolean).join(' · ')}
-        </div>
+      {/* ── Both content (player + coach) ── */}
+      {isPlayer && isCoach && (
+        <>
+          {player.positions && player.positions.length > 0 && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+              {player.positions.map(pos => (
+                <span key={pos} style={{
+                  padding: '3px 10px', borderRadius: '99px', fontSize: '12px',
+                  fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, letterSpacing: '0.08em',
+                  border: '1px solid rgba(196,130,42,0.45)', color: '#c4822a',
+                  background: 'rgba(196,130,42,0.1)',
+                }}>
+                  {pos}
+                </span>
+              ))}
+            </div>
+          )}
+          {player.coaching_specialties && player.coaching_specialties.length > 0 && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+              {player.coaching_specialties.slice(0, 2).map(miniChip)}
+            </div>
+          )}
+        </>
       )}
 
-      {/* Bio — clamped to 2 lines */}
-      {player.bio && (
+      {/* ── Coach-only content ── */}
+      {isCoach && !isPlayer && (
+        <>
+          {player.coaching_specialties && player.coaching_specialties.length > 0 && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+              {player.coaching_specialties.slice(0, 3).map(miniChip)}
+            </div>
+          )}
+          {(player.coaching_experience || (player.coaching_offerings && player.coaching_offerings.length > 0)) && (
+            <div style={{ fontSize: '12px', color: 'rgba(245,237,214,0.5)', fontFamily: "'Barlow', sans-serif" }}>
+              {[player.coaching_experience, ...(player.coaching_offerings?.slice(0, 2) ?? [])].filter(Boolean).join(' · ')}
+            </div>
+          )}
+        </>
+      )}
+
+      {/* ── Parent content ── */}
+      {isParent && (
+        <>
+          {(player.child_position || player.child_age_group) && (
+            <div style={{ fontSize: '12px', color: 'rgba(245,237,214,0.5)', fontFamily: "'Barlow', sans-serif" }}>
+              Child: {[player.child_position, player.child_age_group].filter(Boolean).join(' · ')}
+            </div>
+          )}
+          {player.parent_looking_for && player.parent_looking_for.length > 0 && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+              {player.parent_looking_for.slice(0, 3).map(miniChip)}
+            </div>
+          )}
+        </>
+      )}
+
+      {/* Bio (all roles) */}
+      {(isCoach && !isPlayer ? (player.coaching_bio || player.bio) : player.bio) && (
         <p style={{
           margin: 0, fontSize: '13px', lineHeight: '1.5',
           color: 'rgba(245,237,214,0.5)', fontFamily: "'Barlow', sans-serif",
           display: '-webkit-box', WebkitLineClamp: 2,
           WebkitBoxOrient: 'vertical', overflow: 'hidden',
         } as React.CSSProperties}>
-          {player.bio}
+          {isCoach && !isPlayer ? (player.coaching_bio || player.bio) : player.bio}
         </p>
       )}
 
-      {/* Action buttons: Play Catch + Vouch */}
+      {/* Action buttons */}
       <div style={{ display: 'flex', gap: '8px', marginTop: 'auto', paddingTop: '4px' }}>
         <button
           onClick={handlePlayCatch}
@@ -918,7 +1106,7 @@ function PlayerCard({
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
-export default function PlayersPage() {
+export default function CommunityPage() {
   const router = useRouter()
 
   const [sessionLoading, setSessionLoading] = useState(true)
@@ -932,6 +1120,7 @@ export default function PlayersPage() {
   const [zipCoordsReady, setZipCoordsReady] = useState(false)
 
   const [search, setSearch] = useState('')
+  const [roleTab, setRoleTab] = useState<RoleTab>('all')
   const [levelFilter, setLevelFilter] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
   const [positionFilter, setPositionFilter] = useState('')
@@ -940,7 +1129,6 @@ export default function PlayersPage() {
 
   const [toasts, setToasts] = useState<Toast[]>([])
   const [modalPlayer, setModalPlayer] = useState<Profile | null>(null)
-  // Map of player.id -> PartnerStatus
   const [partnerStatusMap, setPartnerStatusMap] = useState<Record<string, PartnerStatus>>({})
 
   function showToast(message: string, type: 'success' | 'info' = 'success') {
@@ -986,15 +1174,14 @@ export default function PlayersPage() {
     return () => subscription.unsubscribe()
   }, [router])
 
-  // Fetch players + partner statuses in parallel
   useEffect(() => {
     if (!userId) return
     setZipCoordsReady(false)
-    async function fetchPlayers() {
-      const [playersRes, followsRes] = await Promise.all([
+    async function fetchProfiles() {
+      const [profilesRes, followsRes] = await Promise.all([
         supabase
           .from('profiles')
-          .select('id, first_name, last_name, date_of_birth, zip_code, positions, highest_level, status, bio, avatar_url, vouches')
+          .select('id, first_name, last_name, date_of_birth, zip_code, positions, highest_level, status, bio, avatar_url, vouches, role, coaching_specialties, coaching_experience, coaching_offerings, age_groups_coached, coaching_bio, child_age_group, child_position, child_skill_level, parent_looking_for')
           .neq('id', userId),
         supabase
           .from('follows')
@@ -1003,35 +1190,44 @@ export default function PlayersPage() {
           .in('status', ['pending', 'accepted']),
       ])
 
-      const playerList: Profile[] = (playersRes.data ?? []) as Profile[]
+      const profileList: Profile[] = (profilesRes.data ?? []) as Profile[]
 
-      // Build partner status map
       const statusMap: Record<string, PartnerStatus> = {}
       for (const f of (followsRes.data ?? []) as { following_id: string; status: string }[]) {
         statusMap[f.following_id] = f.status as PartnerStatus
       }
       setPartnerStatusMap(statusMap)
 
-      if (playerList.length === 0) {
+      if (profileList.length === 0) {
         setPlayers([]); setPlayersLoading(false); setZipCoordsReady(true); return
       }
 
-      setPlayers(playerList)
+      setPlayers(profileList)
       setPlayersLoading(false)
-      prefetchAllZips(playerList, userZip)
+      prefetchAllZips(profileList, userZip)
     }
-    fetchPlayers()
+    fetchProfiles()
   }, [userId, prefetchAllZips, userZip])
 
   const filtered = useMemo(() => {
     let list = [...players]
+
+    // Role tab filter
+    if (roleTab === 'players') {
+      list = list.filter(p => p.role === 'player' || p.role === 'both' || !p.role)
+    } else if (roleTab === 'coaches') {
+      list = list.filter(p => p.role === 'coach' || p.role === 'both')
+    } else if (roleTab === 'parents') {
+      list = list.filter(p => p.role === 'parent')
+    }
 
     if (search.trim()) {
       const q = search.toLowerCase()
       list = list.filter(p => {
         const name = [p.first_name, p.last_name].filter(Boolean).join(' ').toLowerCase()
         const pos = (p.positions ?? []).join(' ').toLowerCase()
-        return name.includes(q) || pos.includes(q)
+        const specialties = (p.coaching_specialties ?? []).join(' ').toLowerCase()
+        return name.includes(q) || pos.includes(q) || specialties.includes(q)
       })
     }
     if (levelFilter)    list = list.filter(p => p.highest_level === levelFilter)
@@ -1061,7 +1257,7 @@ export default function PlayersPage() {
     })
 
     return list
-  }, [players, search, levelFilter, statusFilter, positionFilter, ageFilter, distanceFilter, userCoords, zipCoordsReady])
+  }, [players, search, roleTab, levelFilter, statusFilter, positionFilter, ageFilter, distanceFilter, userCoords, zipCoordsReady])
 
   if (sessionLoading) {
     return (
@@ -1080,6 +1276,13 @@ export default function PlayersPage() {
       })()
     : null
 
+  const ROLE_TABS: { value: RoleTab; label: string }[] = [
+    { value: 'all', label: 'All' },
+    { value: 'players', label: 'Players' },
+    { value: 'coaches', label: 'Coaches' },
+    { value: 'parents', label: 'Parents' },
+  ]
+
   return (
     <AuthenticatedLayout>
     <div style={{ minHeight: '100vh', background: '#0d1f3c', color: '#f5edd6', fontFamily: "'Barlow', sans-serif" }}>
@@ -1090,11 +1293,31 @@ export default function PlayersPage() {
 
         <div style={{ marginBottom: '24px' }}>
           <h1 style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 'clamp(36px, 6vw, 56px)', letterSpacing: '0.05em', margin: 0, lineHeight: 1 }}>
-            Find <span style={{ color: '#c4822a' }}>Players</span>
+            <span style={{ color: '#c4822a' }}>Community</span>
           </h1>
           <p style={{ marginTop: '6px', fontSize: '15px', color: 'rgba(245,237,214,0.5)' }}>
-            Connect with players near you
+            Find players, coaches, and more in your area
           </p>
+        </div>
+
+        {/* Role tabs */}
+        <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', flexWrap: 'wrap' }}>
+          {ROLE_TABS.map(tab => (
+            <button
+              key={tab.value}
+              onClick={() => setRoleTab(tab.value)}
+              style={{
+                padding: '7px 18px', borderRadius: '99px', fontSize: '13px', cursor: 'pointer',
+                fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, letterSpacing: '0.08em',
+                border: roleTab === tab.value ? '1px solid #c4822a' : '1px solid rgba(245,237,214,0.2)',
+                background: roleTab === tab.value ? '#c4822a' : 'transparent',
+                color: roleTab === tab.value ? '#0d1f3c' : 'rgba(245,237,214,0.6)',
+                transition: 'all 0.15s',
+              }}
+            >
+              {tab.label}
+            </button>
+          ))}
         </div>
 
         {/* Filter bar */}
@@ -1105,7 +1328,7 @@ export default function PlayersPage() {
         }}>
           <div style={{ flex: '1 1 160px' }}>
             <input type="text" value={search} onChange={e => setSearch(e.target.value)}
-              placeholder="Search by name or position..." style={FILTER_INPUT}
+              placeholder="Search by name, position, specialty..." style={FILTER_INPUT}
               onFocus={onFocusBorder} onBlur={onBlurBorder} />
           </div>
           <div style={{ flex: '1 1 150px' }}>
@@ -1154,7 +1377,7 @@ export default function PlayersPage() {
 
         {zipCoordsReady && userCoords === null && distanceFilter !== 'everywhere' && (
           <p style={{ fontSize: '12px', color: 'rgba(245,237,214,0.35)', fontFamily: "'Barlow', sans-serif", margin: '-14px 0 20px' }}>
-            Location not available — showing all players
+            Location not available — showing all members
           </p>
         )}
 
@@ -1164,19 +1387,19 @@ export default function PlayersPage() {
           </div>
         ) : !zipCoordsReady && distanceFilter !== 'everywhere' ? (
           <p style={{ fontSize: '13px', color: 'rgba(245,237,214,0.35)', fontFamily: "'Barlow', sans-serif", textAlign: 'center', padding: '48px 0' }}>
-            Loading nearby players…
+            Loading nearby members…
           </p>
         ) : players.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '80px 20px' }}>
             <div style={{ fontSize: '52px', marginBottom: '16px' }}>⚾</div>
-            <h2 style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: '32px', letterSpacing: '0.05em', color: '#f5edd6', margin: '0 0 8px' }}>No Players Yet</h2>
-            <p style={{ color: 'rgba(245,237,214,0.5)', fontSize: '15px', margin: 0 }}>Be the first player in your area!</p>
+            <h2 style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: '32px', letterSpacing: '0.05em', color: '#f5edd6', margin: '0 0 8px' }}>No Members Yet</h2>
+            <p style={{ color: 'rgba(245,237,214,0.5)', fontSize: '15px', margin: 0 }}>Be the first to join your area!</p>
           </div>
         ) : filtered.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '80px 20px' }}>
             <div style={{ fontSize: '52px', marginBottom: '16px' }}>🔍</div>
             <h2 style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: '32px', letterSpacing: '0.05em', color: '#f5edd6', margin: '0 0 8px' }}>No Matches</h2>
-            <p style={{ color: 'rgba(245,237,214,0.5)', fontSize: '15px', margin: 0 }}>No players found matching your filters.</p>
+            <p style={{ color: 'rgba(245,237,214,0.5)', fontSize: '15px', margin: 0 }}>No members found matching your filters.</p>
           </div>
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '16px' }}>
@@ -1186,7 +1409,7 @@ export default function PlayersPage() {
                 ? getDistance(userCoords.lat, userCoords.lon, playerCoords.lat, playerCoords.lon)
                 : null
               return (
-                <PlayerCard
+                <CommunityCard
                   key={player.id}
                   player={player}
                   currentUserId={userId!}
