@@ -25,7 +25,6 @@ type Profile = {
   coaching_experience: string | null
   coaching_offerings: string[] | null
   age_groups_coached: string[] | null
-  coaching_bio: string | null
   child_age_group: string | null
   child_position: string | null
   child_skill_level: string | null
@@ -177,25 +176,20 @@ function onBlurBorder(e: React.FocusEvent<HTMLInputElement | HTMLSelectElement>)
 // ── Role badge ────────────────────────────────────────────────────────────────
 
 function RoleBadge({ role }: { role: string }) {
+  const base: React.CSSProperties = { fontSize: '10px', fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, letterSpacing: '0.06em', borderRadius: '99px', padding: '2px 8px' }
   if (role === 'player') return (
-    <span style={{ fontSize: '10px', fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, letterSpacing: '0.06em', color: '#63b3ed', background: 'rgba(99,179,237,0.1)', border: '1px solid rgba(99,179,237,0.3)', borderRadius: '4px', padding: '2px 6px' }}>
-      Player
-    </span>
+    <span style={{ ...base, background: '#1e3a5f', color: '#f5edd6' }}>Player</span>
   )
   if (role === 'coach') return (
-    <span style={{ fontSize: '10px', fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, letterSpacing: '0.06em', color: '#c4822a', background: 'rgba(196,130,42,0.15)', border: '1px solid rgba(196,130,42,0.4)', borderRadius: '4px', padding: '2px 6px' }}>
-      Coach
-    </span>
+    <span style={{ ...base, background: '#c4822a', color: '#0d1f3c' }}>Coach</span>
   )
   if (role === 'parent') return (
-    <span style={{ fontSize: '10px', fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, letterSpacing: '0.06em', color: '#68d391', background: 'rgba(104,211,145,0.1)', border: '1px solid rgba(104,211,145,0.3)', borderRadius: '4px', padding: '2px 6px' }}>
-      Parent
-    </span>
+    <span style={{ ...base, background: '#1a5c3a', color: '#f5edd6' }}>Parent</span>
   )
   if (role === 'both') return (
     <span style={{ display: 'inline-flex', gap: '4px' }}>
-      <span style={{ fontSize: '10px', fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, letterSpacing: '0.06em', color: '#63b3ed', background: 'rgba(99,179,237,0.1)', border: '1px solid rgba(99,179,237,0.3)', borderRadius: '4px', padding: '2px 6px' }}>Player</span>
-      <span style={{ fontSize: '10px', fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, letterSpacing: '0.06em', color: '#c4822a', background: 'rgba(196,130,42,0.15)', border: '1px solid rgba(196,130,42,0.4)', borderRadius: '4px', padding: '2px 6px' }}>Coach</span>
+      <span style={{ ...base, background: '#1e3a5f', color: '#f5edd6' }}>Player</span>
+      <span style={{ ...base, background: '#c4822a', color: '#0d1f3c' }}>Coach</span>
     </span>
   )
   return null
@@ -652,7 +646,7 @@ function PlayerModal({
           <div style={{ height: '1px', background: 'rgba(196,130,42,0.15)', marginBottom: '24px' }} />
 
           {/* ── Coach section ── */}
-          {isCoach && (player.coaching_specialties?.length || player.coaching_experience || player.coaching_offerings?.length || player.age_groups_coached?.length || player.coaching_bio) && (
+          {isCoach && (player.coaching_specialties?.length || player.coaching_experience || player.coaching_offerings?.length || player.age_groups_coached?.length) && (
             <div style={{ marginBottom: '28px' }}>
               <h3 style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: '20px', letterSpacing: '0.05em', margin: '0 0 14px', color: '#f5edd6' }}>
                 <span style={{ color: '#c4822a' }}>Coaching</span> Info
@@ -688,11 +682,6 @@ function PlayerModal({
                     </div>
                   </div>
                 )}
-                {player.coaching_bio && (
-                  <p style={{ margin: 0, fontSize: '13px', lineHeight: '1.6', color: 'rgba(245,237,214,0.65)', fontFamily: "'Barlow', sans-serif", padding: '12px 14px', background: 'rgba(255,255,255,0.04)', borderRadius: '8px', border: '1px solid rgba(245,237,214,0.07)' }}>
-                    {player.coaching_bio}
-                  </p>
-                )}
               </div>
             </div>
           )}
@@ -724,7 +713,7 @@ function PlayerModal({
             </div>
           ) : (
             <>
-              {history.length > 0 && (
+              {isPlayer && history.length > 0 && (
                 <div style={{ marginBottom: '28px' }}>
                   <h3 style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: '20px', letterSpacing: '0.05em', margin: '0 0 12px', color: '#f5edd6' }}>
                     Where They&apos;ve <span style={{ color: '#c4822a' }}>Played</span>
@@ -1057,14 +1046,14 @@ function CommunityCard({
       )}
 
       {/* Bio (all roles) */}
-      {(isCoach && !isPlayer ? (player.coaching_bio || player.bio) : player.bio) && (
+      {player.bio && (
         <p style={{
           margin: 0, fontSize: '13px', lineHeight: '1.5',
           color: 'rgba(245,237,214,0.5)', fontFamily: "'Barlow', sans-serif",
           display: '-webkit-box', WebkitLineClamp: 2,
           WebkitBoxOrient: 'vertical', overflow: 'hidden',
         } as React.CSSProperties}>
-          {isCoach && !isPlayer ? (player.coaching_bio || player.bio) : player.bio}
+          {player.bio}
         </p>
       )}
 
@@ -1181,7 +1170,7 @@ export default function CommunityPage() {
       const [profilesRes, followsRes] = await Promise.all([
         supabase
           .from('profiles')
-          .select('id, first_name, last_name, date_of_birth, zip_code, positions, highest_level, status, bio, avatar_url, vouches, role, coaching_specialties, coaching_experience, coaching_offerings, age_groups_coached, coaching_bio, child_age_group, child_position, child_skill_level, parent_looking_for')
+          .select('id, first_name, last_name, date_of_birth, zip_code, positions, highest_level, status, bio, avatar_url, vouches, role, coaching_specialties, coaching_experience, coaching_offerings, age_groups_coached, child_age_group, child_position, child_skill_level, parent_looking_for')
           .neq('id', userId),
         supabase
           .from('follows')
