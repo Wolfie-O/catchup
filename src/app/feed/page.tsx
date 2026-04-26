@@ -23,6 +23,7 @@ type AuthorProfile = {
   vouches: number | null
   highest_level: string | null
   status: string | null
+  role?: string | null
 }
 
 type Post = {
@@ -232,7 +233,7 @@ function PostCard({ post, currentUserId, currentUserProfile, distanceMi }: {
       const authorIds = [...new Set(raw.map((c: { user_id: string }) => c.user_id))]
       const { data: profilesData } = await supabase
         .from('profiles')
-        .select('id, first_name, last_name, avatar_url, vouches, highest_level, status')
+        .select('id, first_name, last_name, avatar_url, vouches, highest_level, status, role')
         .in('id', authorIds)
 
       const profileMap: Record<string, AuthorProfile> = {}
@@ -532,8 +533,9 @@ export default function FeedPage() {
   const [postTag, setPostTag] = useState<PostTagValue | null>(null)
   const [posting, setPosting] = useState(false)
 
-  // ── Tag filter ───────────────────────────────────────────────────────────────
+  // ── Tag + role filters ───────────────────────────────────────────────────────
   const [tagFilter, setTagFilter] = useState<PostTagValue | null>(null)
+  const [roleFilter, setRoleFilter] = useState<'all' | 'players' | 'coaches' | 'parents'>('all')
 
   const fileInputRef = useRef<HTMLInputElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -619,7 +621,7 @@ export default function FeedPage() {
     // 2. Fetch author profiles
     const { data: authorsData } = await supabase
       .from('profiles')
-      .select('id, first_name, last_name, avatar_url, vouches, highest_level, status')
+      .select('id, first_name, last_name, avatar_url, vouches, highest_level, status, role')
       .in('id', authorIds)
 
     const authorMap: Record<string, AuthorProfile> = {}
@@ -700,7 +702,7 @@ export default function FeedPage() {
 
         const { data: authorData } = await supabase
           .from('profiles')
-          .select('id, first_name, last_name, avatar_url, vouches, highest_level, status')
+          .select('id, first_name, last_name, avatar_url, vouches, highest_level, status, role')
           .eq('id', raw.user_id)
           .single()
 
@@ -851,11 +853,16 @@ export default function FeedPage() {
       }
     }
 
+    // Role filter
+    if (roleFilter === 'players') base = base.filter(p => p.author.role === 'player' || p.author.role === 'both')
+    else if (roleFilter === 'coaches') base = base.filter(p => p.author.role === 'coach' || p.author.role === 'both')
+    else if (roleFilter === 'parents') base = base.filter(p => p.author.role === 'parent')
+
     // Tag filter
     if (tagFilter) base = base.filter(p => p.tag === tagFilter)
 
     return base
-  }, [posts, distanceFilter, userCoords, zipCoordsReady, tagFilter])
+  }, [posts, distanceFilter, userCoords, zipCoordsReady, tagFilter, roleFilter])
 
   // ── Loading ─────────────────────────────────────────────────────────────────
   if (sessionLoading) {
@@ -899,34 +906,82 @@ export default function FeedPage() {
             </p>
           </div>
 
-          {/* Distance filter */}
-          <div style={{ marginBottom: userCoords === null && distanceFilter !== 'everywhere' ? '12px' : '24px' }}>
+          {/* ── Filter bar ── */}
+          <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '4px', marginBottom: '16px', scrollbarWidth: 'none' }}>
+            {/* Location */}
             <select
               value={distanceFilter}
               onChange={e => setDistanceFilter(e.target.value as typeof distanceFilter)}
               style={{
-                padding: '8px 32px 8px 12px', borderRadius: '8px',
-                border: '1px solid rgba(196,130,42,0.3)',
-                background: 'rgba(255,255,255,0.06)', color: '#f5edd6',
+                flexShrink: 0, padding: '8px 28px 8px 16px', borderRadius: '99px',
+                border: `1px solid ${distanceFilter !== 'area' ? '#c4822a' : 'rgba(245,237,214,0.2)'}`,
+                background: 'rgba(255,255,255,0.06)',
+                color: distanceFilter !== 'area' ? '#c4822a' : '#f5edd6',
                 fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700,
                 fontSize: '13px', letterSpacing: '0.06em', outline: 'none', cursor: 'pointer',
                 appearance: 'none',
-                backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='rgba(245,237,214,0.4)' d='M6 8L1 3h10z'/%3E%3C/svg%3E")`,
-                backgroundRepeat: 'no-repeat', backgroundPosition: 'right 10px center',
+                backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 12 12'%3E%3Cpath fill='rgba(245,237,214,0.4)' d='M6 8L1 3h10z'/%3E%3C/svg%3E")`,
+                backgroundRepeat: 'no-repeat', backgroundPosition: 'right 12px center',
               }}
             >
               <option value="area" style={{ background: '#0d1f3c' }}>My Area</option>
-              <option value="5" style={{ background: '#0d1f3c' }}>Within 5 miles</option>
-              <option value="10" style={{ background: '#0d1f3c' }}>Within 10 miles</option>
-              <option value="20" style={{ background: '#0d1f3c' }}>Within 20 miles</option>
-              <option value="50" style={{ background: '#0d1f3c' }}>Within 50 miles</option>
+              <option value="5" style={{ background: '#0d1f3c' }}>Within 5 mi</option>
+              <option value="10" style={{ background: '#0d1f3c' }}>Within 10 mi</option>
+              <option value="20" style={{ background: '#0d1f3c' }}>Within 20 mi</option>
+              <option value="50" style={{ background: '#0d1f3c' }}>Within 50 mi</option>
               <option value="everywhere" style={{ background: '#0d1f3c' }}>Everywhere</option>
+            </select>
+
+            {/* Role */}
+            <select
+              value={roleFilter}
+              onChange={e => setRoleFilter(e.target.value as typeof roleFilter)}
+              style={{
+                flexShrink: 0, padding: '8px 28px 8px 16px', borderRadius: '99px',
+                border: `1px solid ${roleFilter !== 'all' ? '#c4822a' : 'rgba(245,237,214,0.2)'}`,
+                background: 'rgba(255,255,255,0.06)',
+                color: roleFilter !== 'all' ? '#c4822a' : '#f5edd6',
+                fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700,
+                fontSize: '13px', letterSpacing: '0.06em', outline: 'none', cursor: 'pointer',
+                appearance: 'none',
+                backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 12 12'%3E%3Cpath fill='rgba(245,237,214,0.4)' d='M6 8L1 3h10z'/%3E%3C/svg%3E")`,
+                backgroundRepeat: 'no-repeat', backgroundPosition: 'right 12px center',
+              }}
+            >
+              <option value="all" style={{ background: '#0d1f3c' }}>All Roles</option>
+              <option value="players" style={{ background: '#0d1f3c' }}>Players</option>
+              <option value="coaches" style={{ background: '#0d1f3c' }}>Coaches</option>
+              <option value="parents" style={{ background: '#0d1f3c' }}>Parents</option>
+            </select>
+
+            {/* Tag */}
+            <select
+              value={tagFilter ?? ''}
+              onChange={e => setTagFilter((e.target.value || null) as PostTagValue | null)}
+              style={{
+                flexShrink: 0, padding: '8px 28px 8px 16px', borderRadius: '99px',
+                border: `1px solid ${tagFilter ? '#c4822a' : 'rgba(245,237,214,0.2)'}`,
+                background: 'rgba(255,255,255,0.06)',
+                color: tagFilter ? '#c4822a' : '#f5edd6',
+                fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700,
+                fontSize: '13px', letterSpacing: '0.06em', outline: 'none', cursor: 'pointer',
+                appearance: 'none',
+                backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 12 12'%3E%3Cpath fill='rgba(245,237,214,0.4)' d='M6 8L1 3h10z'/%3E%3C/svg%3E")`,
+                backgroundRepeat: 'no-repeat', backgroundPosition: 'right 12px center',
+              }}
+            >
+              <option value="" style={{ background: '#0d1f3c' }}>All Tags</option>
+              {POST_TAGS.map(t => (
+                <option key={t.value} value={t.value} style={{ background: '#0d1f3c' }}>
+                  {t.emoji} {t.label}
+                </option>
+              ))}
             </select>
           </div>
 
           {/* Location unavailable notice */}
           {userCoords === null && distanceFilter !== 'everywhere' && (
-            <p style={{ fontSize: '12px', color: 'rgba(245,237,214,0.35)', fontFamily: "'Barlow', sans-serif", margin: '0 0 24px' }}>
+            <p style={{ fontSize: '12px', color: 'rgba(245,237,214,0.35)', fontFamily: "'Barlow', sans-serif", margin: '0 0 16px' }}>
               Location not available — showing all posts
             </p>
           )}
@@ -993,37 +1048,38 @@ export default function FeedPage() {
                 )}
 
                 {/* Tag selector */}
-                <div style={{ marginTop: '12px' }}>
+                <div style={{ marginTop: '10px' }}>
                   <div style={{
                     fontSize: '10px', fontFamily: "'Barlow Condensed', sans-serif",
                     fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase',
-                    color: 'rgba(245,237,214,0.4)', marginBottom: '8px',
+                    color: 'rgba(245,237,214,0.4)', marginBottom: '6px',
                   }}>
                     Tag Your Post (Optional)
                   </div>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                    {POST_TAGS.map(t => {
-                      const active = postTag === t.value
-                      return (
-                        <button
-                          key={t.value}
-                          type="button"
-                          onClick={() => setPostTag(active ? null : t.value as PostTagValue)}
-                          style={{
-                            padding: '4px 10px', borderRadius: '99px', cursor: 'pointer',
-                            fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700,
-                            fontSize: '11px', letterSpacing: '0.04em',
-                            border: active ? '1px solid #c4822a' : '1px solid rgba(245,237,214,0.2)',
-                            background: active ? '#c4822a' : 'transparent',
-                            color: active ? '#0d1f3c' : 'rgba(245,237,214,0.6)',
-                            transition: 'all 0.12s',
-                          }}
-                        >
-                          {t.emoji} {t.label}
-                        </button>
-                      )
-                    })}
-                  </div>
+                  <select
+                    value={postTag ?? ''}
+                    onChange={e => setPostTag((e.target.value || null) as PostTagValue | null)}
+                    style={{
+                      width: '100%', padding: '10px 13px', borderRadius: '8px',
+                      fontSize: '14px', background: 'rgba(255,255,255,0.06)',
+                      border: '1px solid rgba(245,237,214,0.15)', color: postTag ? '#f5edd6' : 'rgba(245,237,214,0.4)',
+                      outline: 'none', boxSizing: 'border-box',
+                      fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 600,
+                      cursor: 'pointer', appearance: 'none',
+                      backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='rgba(245,237,214,0.4)' d='M6 8L1 3h10z'/%3E%3C/svg%3E")`,
+                      backgroundRepeat: 'no-repeat', backgroundPosition: 'right 13px center',
+                      paddingRight: '34px',
+                    }}
+                    onFocus={e => { e.currentTarget.style.borderColor = 'rgba(196,130,42,0.6)' }}
+                    onBlur={e => { e.currentTarget.style.borderColor = 'rgba(245,237,214,0.15)' }}
+                  >
+                    <option value="" style={{ background: '#0d1f3c', color: 'rgba(245,237,214,0.5)' }}>— Select a tag —</option>
+                    {POST_TAGS.map(t => (
+                      <option key={t.value} value={t.value} style={{ background: '#0d1f3c', color: '#f5edd6' }}>
+                        {t.emoji} {t.label}
+                      </option>
+                    ))}
+                  </select>
                 </div>
 
                 {/* Toolbar */}
@@ -1082,33 +1138,6 @@ export default function FeedPage() {
             onChange={handleImageSelect}
             style={{ display: 'none' }}
           />
-
-          {/* ── Tag filter bar ── */}
-          <div style={{
-            display: 'flex', gap: '6px', overflowX: 'auto', paddingBottom: '4px',
-            marginBottom: '20px', scrollbarWidth: 'none',
-          }}>
-            {([{ value: null, emoji: '', label: 'All' }, ...POST_TAGS] as Array<{ value: string | null; emoji: string; label: string }>).map(t => {
-              const active = tagFilter === t.value
-              return (
-                <button
-                  key={t.value ?? 'all'}
-                  onClick={() => setTagFilter(t.value as PostTagValue | null)}
-                  style={{
-                    flexShrink: 0, padding: '6px 14px', borderRadius: '99px', cursor: 'pointer',
-                    fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700,
-                    fontSize: '12px', letterSpacing: '0.05em', whiteSpace: 'nowrap',
-                    border: active ? 'none' : '1px solid rgba(245,237,214,0.2)',
-                    background: active ? '#c4822a' : 'transparent',
-                    color: active ? '#0d1f3c' : 'rgba(245,237,214,0.6)',
-                    transition: 'all 0.12s',
-                  }}
-                >
-                  {t.emoji ? `${t.emoji} ${t.label}` : t.label}
-                </button>
-              )
-            })}
-          </div>
 
           {/* ── New posts banner ── */}
           {pendingPosts.length > 0 && (
