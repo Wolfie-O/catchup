@@ -38,6 +38,8 @@ type RecentPost = {
   created_at: string
   authorName: string
   authorAvatar: string | null
+  like_count: number
+  comment_count: number
 }
 
 type DiscoverProfile = {
@@ -102,8 +104,9 @@ function formatLastVisit(ts: string): string {
 }
 
 function formatEventDate(dateStr: string): string {
-  const d = new Date(dateStr + 'T00:00:00')
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  if (!dateStr) return ''
+  const date = new Date(dateStr + 'T00:00:00')
+  return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
 }
 
 async function fetchCity(zip: string): Promise<string | null> {
@@ -221,6 +224,7 @@ export default function DashboardPage() {
   const [partnerCount, setPartnerCount] = useState<number | null>(null)
   const [nearbyPlayers, setNearbyPlayers] = useState<DiscoverProfile[]>([])
   const [nearbyCoaches, setNearbyCoaches] = useState<DiscoverProfile[]>([])
+  const [isMobile, setIsMobile] = useState(false)
 
   // ── Auth ──────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -234,6 +238,14 @@ export default function DashboardPage() {
     })
     return () => subscription.unsubscribe()
   }, [router])
+
+  // ── Mobile detection ─────────────────────────────────────────────────────
+  useEffect(() => {
+    function check() { setIsMobile(window.innerWidth < 768) }
+    check()
+    window.addEventListener('resize', check)
+    return () => window.removeEventListener('resize', check)
+  }, [])
 
   // ── Load dashboard data ───────────────────────────────────────────────────
   useEffect(() => {
@@ -341,16 +353,22 @@ export default function DashboardPage() {
         setPendingJoins(joins)
       }
 
-      // 6. Recent posts — fetch author profiles
+      // 6. Recent posts — fetch author profiles + like/comment counts
       const rawPosts = (postsRes.data ?? []) as { id: string; user_id: string; content: string; tag: string | null; created_at: string }[]
       if (rawPosts.length > 0) {
+        const postIds = rawPosts.map(p => p.id)
         const authorIds = [...new Set(rawPosts.map(p => p.user_id))]
-        const { data: authorData } = await supabase
-          .from('profiles')
-          .select('id, first_name, last_name, avatar_url')
-          .in('id', authorIds)
+        const [authorData, likesData, commentsData] = await Promise.all([
+          supabase.from('profiles').select('id, first_name, last_name, avatar_url').in('id', authorIds),
+          supabase.from('post_likes').select('post_id').in('post_id', postIds),
+          supabase.from('post_comments').select('post_id').in('post_id', postIds),
+        ])
         const am: Record<string, { first_name: string | null; last_name: string | null; avatar_url: string | null }> = {}
-        for (const a of (authorData ?? [])) am[a.id] = a
+        for (const a of (authorData.data ?? [])) am[a.id] = a
+        const likeCounts: Record<string, number> = {}
+        for (const l of ((likesData.data ?? []) as { post_id: string }[])) likeCounts[l.post_id] = (likeCounts[l.post_id] ?? 0) + 1
+        const commentCounts: Record<string, number> = {}
+        for (const c of ((commentsData.data ?? []) as { post_id: string }[])) commentCounts[c.post_id] = (commentCounts[c.post_id] ?? 0) + 1
         setRecentPosts(rawPosts.map(p => ({
           id: p.id,
           content: p.content,
@@ -358,6 +376,8 @@ export default function DashboardPage() {
           created_at: p.created_at,
           authorName: [am[p.user_id]?.first_name, am[p.user_id]?.last_name].filter(Boolean).join(' ') || 'Player',
           authorAvatar: am[p.user_id]?.avatar_url ?? null,
+          like_count: likeCounts[p.id] ?? 0,
+          comment_count: commentCounts[p.id] ?? 0,
         })))
       }
 
@@ -508,36 +528,15 @@ export default function DashboardPage() {
             )}
           </div>
 
-          {/* ── Quick Actions ── */}
+          {/* ── The Dugout ── */}
           <div style={{ marginBottom: '36px' }}>
-            <SectionHeader label="Quick Actions" />
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '12px' }}>
-              {[
-                { emoji: '🤝', label: 'Find a Catch Partner', href: '/players?role=player' },
-                { emoji: '👥', label: 'Browse Community', href: '/players' },
-                { emoji: '⚾', label: 'Find a Team', href: '/teams' },
-                { emoji: '📢', label: 'Post to Dugout', href: '/feed' },
-              ].map(action => (
-                <Link
-                  key={action.href}
-                  href={action.href}
-                  style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(245,237,214,0.1)', borderRadius: '16px', padding: '24px 16px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px', textDecoration: 'none', textAlign: 'center', transition: 'border-color 0.15s' }}
-                  onMouseEnter={e => { (e.currentTarget as HTMLAnchorElement).style.borderColor = 'rgba(196,130,42,0.4)' }}
-                  onMouseLeave={e => { (e.currentTarget as HTMLAnchorElement).style.borderColor = 'rgba(245,237,214,0.1)' }}
-                >
-                  <span style={{ fontSize: '32px', lineHeight: 1 }}>{action.emoji}</span>
-                  <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: '13px', letterSpacing: '0.05em', textTransform: 'uppercase', color: 'rgba(245,237,214,0.65)' }}>
-                    {action.label}
-                  </span>
-                </Link>
-              ))}
-            </div>
-          </div>
-
-          {/* ── Recent Dugout Activity ── */}
-          {recentPosts.length > 0 && (
-            <div style={{ marginBottom: '36px' }}>
-              <SectionHeader label="The Dugout" linkHref="/feed" linkLabel="View All →" />
+            <SectionHeader label="The Dugout" linkHref="/feed" linkLabel="View All →" />
+            {recentPosts.length === 0 ? (
+              <div style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(245,237,214,0.1)', borderRadius: '16px', padding: '32px 24px', textAlign: 'center' }}>
+                <p style={{ margin: '0 0 12px', fontSize: '14px', color: 'rgba(245,237,214,0.4)' }}>No posts yet — be the first to post!</p>
+                <Link href="/feed" style={solidBtnStyle}>Go to The Dugout</Link>
+              </div>
+            ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                 {recentPosts.map(post => {
                   const tagInfo = post.tag ? TAG_MAP[post.tag] : null
@@ -559,16 +558,50 @@ export default function DashboardPage() {
                           )}
                           <span style={{ fontSize: '11px', color: 'rgba(245,237,214,0.3)', marginLeft: 'auto', fontFamily: "'Barlow', sans-serif", flexShrink: 0 }}>{formatTimeAgo(post.created_at)}</span>
                         </div>
-                        <p style={{ margin: 0, fontSize: '13px', color: 'rgba(245,237,214,0.6)', lineHeight: 1.5, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' } as React.CSSProperties}>
+                        <p style={{ margin: '0 0 8px', fontSize: '13px', color: 'rgba(245,237,214,0.6)', lineHeight: 1.5, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' } as React.CSSProperties}>
                           {post.content}
                         </p>
+                        <div style={{ display: 'flex', gap: '12px' }}>
+                          <span style={{ fontSize: '11px', color: 'rgba(245,237,214,0.25)', fontFamily: "'Barlow', sans-serif" }}>
+                            ♥ {post.like_count}
+                          </span>
+                          <span style={{ fontSize: '11px', color: 'rgba(245,237,214,0.25)', fontFamily: "'Barlow', sans-serif" }}>
+                            💬 {post.comment_count}
+                          </span>
+                        </div>
                       </div>
                     </Link>
                   )
                 })}
               </div>
+            )}
+          </div>
+
+          {/* ── Quick Actions ── */}
+          <div style={{ marginBottom: '36px' }}>
+            <SectionHeader label="Quick Actions" />
+            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(4, 1fr)', gap: '12px' }}>
+              {[
+                { emoji: '🤝', label: 'Find a Catch Partner', href: '/players?role=player' },
+                { emoji: '👥', label: 'Browse Community', href: '/players' },
+                { emoji: '⚾', label: 'Find a Team', href: '/teams' },
+                { emoji: '📢', label: 'Post to Dugout', href: '/feed' },
+              ].map(action => (
+                <Link
+                  key={action.href}
+                  href={action.href}
+                  style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(245,237,214,0.1)', borderRadius: '16px', padding: '24px 16px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px', textDecoration: 'none', textAlign: 'center', transition: 'border-color 0.15s' }}
+                  onMouseEnter={e => { (e.currentTarget as HTMLAnchorElement).style.borderColor = 'rgba(196,130,42,0.4)' }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLAnchorElement).style.borderColor = 'rgba(245,237,214,0.1)' }}
+                >
+                  <span style={{ fontSize: '32px', lineHeight: 1 }}>{action.emoji}</span>
+                  <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: '13px', letterSpacing: '0.05em', textTransform: 'uppercase', color: 'rgba(245,237,214,0.65)' }}>
+                    {action.label}
+                  </span>
+                </Link>
+              ))}
             </div>
-          )}
+          </div>
 
           {/* ── Discover ── */}
           {showDiscover && (
