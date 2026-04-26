@@ -204,7 +204,7 @@ function ProfileSetupInner() {
         return
       }
 
-      const dest = searchParams?.get('redirect') ?? '/players'
+      const dest = searchParams?.get('redirect') ?? '/dashboard'
 
       if (photoWarning) {
         setError(photoWarning)

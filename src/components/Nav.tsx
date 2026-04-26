@@ -103,7 +103,7 @@ export default function Nav() {
   return (
     <nav className="sticky top-0 z-50 bg-navy border-b-2 border-dirt flex items-center justify-between px-4 md:px-6 h-16">
       {/* Logo */}
-      <Link href="/" className="flex items-center gap-2">
+      <Link href={userId ? '/dashboard' : '/'} className="flex items-center gap-2">
         <div className="w-7 h-7 rounded-full bg-cream flex-shrink-0" />
         <span className="font-display text-2xl md:text-3xl tracking-wide text-cream">
           Catch<span className="text-dirt">Up</span>

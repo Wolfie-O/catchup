@@ -30,7 +30,7 @@ function AuthForm() {
     setError('')
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
-      options: { redirectTo: `${window.location.origin}/players` },
+      options: { redirectTo: `${window.location.origin}/dashboard` },
     })
     if (error) setError(error.message)
   }
@@ -58,7 +58,7 @@ function AuthForm() {
       if (error) {
         setError(error.message)
       } else {
-        router.push(redirectTo ?? '/players')
+        router.push(redirectTo ?? '/dashboard')
       }
     }
 
