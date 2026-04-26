@@ -32,6 +32,7 @@ type Post = {
   image_url: string | null
   location_zip: string | null
   created_at: string
+  tag: string | null
   author: AuthorProfile
   likeCount: number
   userLiked: boolean
@@ -46,6 +47,23 @@ type Comment = {
   created_at: string
   author: AuthorProfile
 }
+
+// ── Tag definitions ────────────────────────────────────────────────────────────
+
+const POST_TAGS = [
+  { value: 'looking_for_players',       emoji: '🔍', label: 'Looking for Players',    short: 'Looking for Players' },
+  { value: 'looking_for_team',          emoji: '🙋', label: 'Looking for a Team',     short: 'Looking for a Team' },
+  { value: 'looking_for_catch_partner', emoji: '🤝', label: 'Looking for Catch Partner', short: 'Catch Partner' },
+  { value: 'lessons_available',         emoji: '🎓', label: 'Lessons Available',      short: 'Lessons' },
+  { value: 'tryouts',                   emoji: '📋', label: 'Tryouts',               short: 'Tryouts' },
+  { value: 'camps_clinics',             emoji: '⛺', label: 'Camps & Clinics',       short: 'Camps' },
+  { value: 'game_recap',                emoji: '🏆', label: 'Game Recap',            short: 'Game Recap' },
+  { value: 'media',                     emoji: '📸', label: 'Media',                 short: 'Media' },
+  { value: 'announcement',              emoji: '📢', label: 'Announcement',          short: 'Announcement' },
+  { value: 'discussion',                emoji: '💬', label: 'Discussion',            short: 'Discussion' },
+] as const
+
+type PostTagValue = typeof POST_TAGS[number]['value']
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -327,6 +345,23 @@ function PostCard({ post, currentUserId, currentUserProfile, distanceMi }: {
         </div>
       </div>
 
+      {/* Tag badge */}
+      {post.tag && (() => {
+        const t = POST_TAGS.find(t => t.value === post.tag)
+        return t ? (
+          <div style={{ padding: '0 16px 10px' }}>
+            <span style={{
+              display: 'inline-flex', alignItems: 'center', gap: '4px',
+              background: 'rgba(196,130,42,0.15)', border: '1px solid rgba(196,130,42,0.3)',
+              color: '#c4822a', fontSize: '11px', borderRadius: '99px', padding: '3px 10px',
+              fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, letterSpacing: '0.04em',
+            }}>
+              {t.emoji} {t.label}
+            </span>
+          </div>
+        ) : null
+      })()}
+
       {/* Content */}
       {post.content && (
         <p style={{
@@ -494,7 +529,11 @@ export default function FeedPage() {
   const [postContent, setPostContent] = useState('')
   const [postImage, setPostImage] = useState<File | null>(null)
   const [postImagePreview, setPostImagePreview] = useState<string | null>(null)
+  const [postTag, setPostTag] = useState<PostTagValue | null>(null)
   const [posting, setPosting] = useState(false)
+
+  // ── Tag filter ───────────────────────────────────────────────────────────────
+  const [tagFilter, setTagFilter] = useState<PostTagValue | null>(null)
 
   const fileInputRef = useRef<HTMLInputElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -613,7 +652,7 @@ export default function FeedPage() {
     // 5. Combine
     const combined: Post[] = rawPosts.map((p: {
       id: string; user_id: string; content: string; image_url: string | null;
-      location_zip: string | null; created_at: string
+      location_zip: string | null; created_at: string; tag: string | null
     }) => ({
       id: p.id,
       user_id: p.user_id,
@@ -621,6 +660,7 @@ export default function FeedPage() {
       image_url: p.image_url ?? null,
       location_zip: p.location_zip ?? null,
       created_at: p.created_at,
+      tag: p.tag ?? null,
       author: authorMap[p.user_id] ?? {
         id: p.user_id, first_name: null, last_name: null, avatar_url: null,
         vouches: null, highest_level: null, status: null,
@@ -653,7 +693,7 @@ export default function FeedPage() {
       }, async (payload) => {
         const raw = payload.new as {
           id: string; user_id: string; content: string;
-          image_url: string | null; location_zip: string | null; created_at: string
+          image_url: string | null; location_zip: string | null; created_at: string; tag: string | null
         }
         // Own posts are prepended optimistically in handlePost
         if (raw.user_id === userId) return
@@ -671,6 +711,7 @@ export default function FeedPage() {
           image_url: raw.image_url,
           location_zip: raw.location_zip,
           created_at: raw.created_at,
+          tag: raw.tag ?? null,
           author: (authorData as AuthorProfile) ?? {
             id: raw.user_id, first_name: null, last_name: null, avatar_url: null,
             vouches: null, highest_level: null, status: null,
@@ -742,6 +783,7 @@ export default function FeedPage() {
       content: postContent.trim(),
       image_url: imageUrl,
       location_zip: myProfile?.zip_code ?? null,
+      tag: postTag ?? null,
     }).select('*').single()
 
     if (error) {
@@ -750,6 +792,7 @@ export default function FeedPage() {
       setPostContent('')
       setPostImage(null)
       setPostImagePreview(null)
+      setPostTag(null)
       if (newPostData) {
         const optimisticPost: Post = {
           id: newPostData.id,
@@ -758,6 +801,7 @@ export default function FeedPage() {
           image_url: newPostData.image_url ?? null,
           location_zip: newPostData.location_zip ?? null,
           created_at: newPostData.created_at,
+          tag: newPostData.tag ?? null,
           author: {
             id: userId,
             first_name: myProfile?.first_name ?? null,
@@ -776,35 +820,42 @@ export default function FeedPage() {
     setPosting(false)
   }
 
-  // ── Distance filter (client-side) ──────────────────────────────────────────
+  // ── Filters (distance + tag, client-side) ──────────────────────────────────
 
   const displayedPosts = useMemo(() => {
     console.log('[Feed] filtering with cache size:', Object.keys(zipCache).length, '| zipCoordsReady:', zipCoordsReady, '| distanceFilter:', distanceFilter, '| userCoords:', userCoords)
 
-    if (distanceFilter === 'everywhere') return posts
-    if (!zipCoordsReady || !userCoords) return posts
+    let base = posts
 
-    if (distanceFilter === 'area') {
-      return posts.filter(p => {
-        if (!p.location_zip) return true
-        const c = zipCache[p.location_zip]
-        if (c === undefined || c === null) return true // zip not found in API — include
-        const d = getDistance(userCoords.lat, userCoords.lon, c.lat, c.lon)
-        console.log('[Feed] post', p.id, '| zip:', p.location_zip, '| distance:', d.toFixed(1), 'mi | limit: 10 mi | pass:', d <= 10)
-        return d <= 10
-      })
+    // Distance filter
+    if (distanceFilter !== 'everywhere' && zipCoordsReady && userCoords) {
+      if (distanceFilter === 'area') {
+        base = base.filter(p => {
+          if (!p.location_zip) return true
+          const c = zipCache[p.location_zip]
+          if (c === undefined || c === null) return true
+          const d = getDistance(userCoords.lat, userCoords.lon, c.lat, c.lon)
+          console.log('[Feed] post', p.id, '| zip:', p.location_zip, '| distance:', d.toFixed(1), 'mi | limit: 10 mi | pass:', d <= 10)
+          return d <= 10
+        })
+      } else {
+        const maxMi = parseInt(distanceFilter)
+        base = base.filter(p => {
+          if (!p.location_zip) return true
+          const c = zipCache[p.location_zip]
+          if (c === undefined || c === null) return true
+          const d = getDistance(userCoords.lat, userCoords.lon, c.lat, c.lon)
+          console.log('[Feed] post', p.id, '| zip:', p.location_zip, '| distance:', d.toFixed(1), 'mi | limit:', maxMi, 'mi | pass:', d <= maxMi)
+          return d <= maxMi
+        })
+      }
     }
 
-    const maxMi = parseInt(distanceFilter)
-    return posts.filter(p => {
-      if (!p.location_zip) return true
-      const c = zipCache[p.location_zip]
-      if (c === undefined || c === null) return true // zip not found in API — include
-      const d = getDistance(userCoords.lat, userCoords.lon, c.lat, c.lon)
-      console.log('[Feed] post', p.id, '| zip:', p.location_zip, '| distance:', d.toFixed(1), 'mi | limit:', maxMi, 'mi | pass:', d <= maxMi)
-      return d <= maxMi
-    })
-  }, [posts, distanceFilter, userCoords, zipCoordsReady])
+    // Tag filter
+    if (tagFilter) base = base.filter(p => p.tag === tagFilter)
+
+    return base
+  }, [posts, distanceFilter, userCoords, zipCoordsReady, tagFilter])
 
   // ── Loading ─────────────────────────────────────────────────────────────────
   if (sessionLoading) {
@@ -941,6 +992,40 @@ export default function FeedPage() {
                   </div>
                 )}
 
+                {/* Tag selector */}
+                <div style={{ marginTop: '12px' }}>
+                  <div style={{
+                    fontSize: '10px', fontFamily: "'Barlow Condensed', sans-serif",
+                    fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase',
+                    color: 'rgba(245,237,214,0.4)', marginBottom: '8px',
+                  }}>
+                    Tag Your Post (Optional)
+                  </div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                    {POST_TAGS.map(t => {
+                      const active = postTag === t.value
+                      return (
+                        <button
+                          key={t.value}
+                          type="button"
+                          onClick={() => setPostTag(active ? null : t.value as PostTagValue)}
+                          style={{
+                            padding: '4px 10px', borderRadius: '99px', cursor: 'pointer',
+                            fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700,
+                            fontSize: '11px', letterSpacing: '0.04em',
+                            border: active ? '1px solid #c4822a' : '1px solid rgba(245,237,214,0.2)',
+                            background: active ? '#c4822a' : 'transparent',
+                            color: active ? '#0d1f3c' : 'rgba(245,237,214,0.6)',
+                            transition: 'all 0.12s',
+                          }}
+                        >
+                          {t.emoji} {t.label}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+
                 {/* Toolbar */}
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '10px' }}>
                   <button
@@ -998,6 +1083,33 @@ export default function FeedPage() {
             style={{ display: 'none' }}
           />
 
+          {/* ── Tag filter bar ── */}
+          <div style={{
+            display: 'flex', gap: '6px', overflowX: 'auto', paddingBottom: '4px',
+            marginBottom: '20px', scrollbarWidth: 'none',
+          }}>
+            {([{ value: null, emoji: '', label: 'All' }, ...POST_TAGS] as Array<{ value: string | null; emoji: string; label: string }>).map(t => {
+              const active = tagFilter === t.value
+              return (
+                <button
+                  key={t.value ?? 'all'}
+                  onClick={() => setTagFilter(t.value as PostTagValue | null)}
+                  style={{
+                    flexShrink: 0, padding: '6px 14px', borderRadius: '99px', cursor: 'pointer',
+                    fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700,
+                    fontSize: '12px', letterSpacing: '0.05em', whiteSpace: 'nowrap',
+                    border: active ? 'none' : '1px solid rgba(245,237,214,0.2)',
+                    background: active ? '#c4822a' : 'transparent',
+                    color: active ? '#0d1f3c' : 'rgba(245,237,214,0.6)',
+                    transition: 'all 0.12s',
+                  }}
+                >
+                  {t.emoji ? `${t.emoji} ${t.label}` : t.label}
+                </button>
+              )
+            })}
+          </div>
+
           {/* ── New posts banner ── */}
           {pendingPosts.length > 0 && (
             <button
@@ -1043,7 +1155,9 @@ export default function FeedPage() {
                 No Posts Yet
               </h2>
               <p style={{ color: 'rgba(245,237,214,0.45)', fontSize: '15px', margin: 0 }}>
-                {distanceFilter === 'everywhere'
+                {tagFilter
+                  ? 'No posts with this tag yet — try a different filter or be the first!'
+                  : distanceFilter === 'everywhere'
                   ? 'Be the first — share a baseball thought!'
                   : distanceFilter === 'area'
                   ? 'No posts in your area yet — try a wider distance or be the first!'
