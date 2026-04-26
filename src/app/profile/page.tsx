@@ -825,6 +825,7 @@ export default function ProfilePage() {
                         {m.role}{m.teams.level ? ` · ${m.teams.level}` : ''}
                       </div>
                     </div>
+                    <span style={{ fontSize: '13px', color: 'rgba(196,130,42,0.7)', flexShrink: 0 }}>View →</span>
                   </Link>
                 ))}
               </div>

@@ -29,9 +29,9 @@ export default function Nav() {
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
   const [menuOpen, setMenuOpen] = useState(false)
   const [myTeams, setMyTeams] = useState<MyTeam[]>([])
-  const [teamsDropdownOpen, setTeamsDropdownOpen] = useState(false)
+  const [userDropdownOpen, setUserDropdownOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
-  const teamsMenuRef = useRef<HTMLDivElement>(null)
+  const userMenuRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     async function fetchUserData(uid: string) {
@@ -68,8 +68,8 @@ export default function Nav() {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
         setMenuOpen(false)
       }
-      if (teamsMenuRef.current && !teamsMenuRef.current.contains(e.target as Node)) {
-        setTeamsDropdownOpen(false)
+      if (userMenuRef.current && !userMenuRef.current.contains(e.target as Node)) {
+        setUserDropdownOpen(false)
       }
     }
     document.addEventListener('mousedown', handleClickOutside)
@@ -77,7 +77,7 @@ export default function Nav() {
   }, [])
 
   // Close dropdowns on route change
-  useEffect(() => { setMenuOpen(false); setTeamsDropdownOpen(false) }, [pathname])
+  useEffect(() => { setMenuOpen(false); setUserDropdownOpen(false) }, [pathname])
 
   async function handleLogOut() {
     await supabase.auth.signOut()
@@ -125,91 +125,87 @@ export default function Nav() {
             {myTeams[0].teams.name}
           </Link>
         )}
-        {userId && myTeams.length >= 2 && (
-          <div ref={teamsMenuRef} style={{ position: 'relative' }}>
+
+        {/* User avatar dropdown */}
+        {userId ? (
+          <div ref={userMenuRef} style={{ position: 'relative', marginLeft: '8px' }}>
             <button
-              onClick={() => setTeamsDropdownOpen(o => !o)}
-              className="font-condensed font-semibold tracking-widest uppercase text-sm px-4 py-2 rounded transition-colors text-cream-dark hover:text-dirt hover:bg-dirt/10"
-              style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+              onClick={() => setUserDropdownOpen(o => !o)}
+              className="font-condensed font-semibold tracking-widest uppercase text-sm px-3 py-2 rounded text-cream-dark hover:text-dirt hover:bg-dirt/10 transition-colors"
+              style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
             >
-              <NavTeamLogo name={myTeams[0].teams.name} logoUrl={myTeams[0].teams.logo_url} size={20} />
-              My Teams
-              <svg width="10" height="10" viewBox="0 0 10 10" fill="none" style={{ marginLeft: 2 }}>
+              {avatarUrl ? (
+                <img src={avatarUrl} alt="" style={{ width: 26, height: 26, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
+              ) : (
+                <div style={{ width: 26, height: 26, borderRadius: '50%', background: '#c4822a', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Bebas Neue', sans-serif", fontSize: 10, color: '#0d1f3c', letterSpacing: '0.04em' }}>
+                  {firstName ? firstName[0].toUpperCase() : '?'}
+                </div>
+              )}
+              {firstName ?? 'Me'}
+              <svg width="10" height="10" viewBox="0 0 10 10" fill="none" style={{ marginLeft: 1 }}>
                 <path d="M2 3.5L5 6.5L8 3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
             </button>
-            {teamsDropdownOpen && (
+            {userDropdownOpen && (
               <div style={{
-                position: 'absolute', top: 'calc(100% + 6px)', left: 0,
+                position: 'absolute', top: 'calc(100% + 6px)', right: 0,
                 minWidth: '200px', background: '#0d1f3c',
                 border: '1px solid rgba(196,130,42,0.35)',
                 borderRadius: '10px', overflow: 'hidden',
                 boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
                 zIndex: 100,
               }}>
-                {myTeams.map(m => (
-                  <Link
-                    key={m.team_id}
-                    href={`/teams/${m.teams.id}`}
-                    className="block font-condensed font-semibold tracking-widest uppercase text-sm px-4 py-3 transition-colors text-cream-dark hover:text-dirt hover:bg-dirt/10"
-                    style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
-                  >
-                    <NavTeamLogo name={m.teams.name} logoUrl={m.teams.logo_url} size={20} />
-                    {m.teams.name}
-                  </Link>
-                ))}
-                <div style={{ borderTop: '1px solid rgba(196,130,42,0.2)', margin: '4px 0' }} />
                 <Link
-                  href="/teams"
+                  href="/profile"
                   className="block font-condensed font-semibold tracking-widest uppercase text-sm px-4 py-3 transition-colors text-cream-dark hover:text-dirt hover:bg-dirt/10"
                 >
-                  Browse All Teams
+                  My Profile
                 </Link>
+                {myTeams.length >= 2 && (
+                  <>
+                    <div style={{ borderTop: '1px solid rgba(196,130,42,0.12)', margin: '2px 0' }} />
+                    <div style={{ padding: '6px 16px 2px', fontSize: '10px', fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'rgba(245,237,214,0.3)' }}>
+                      My Teams
+                    </div>
+                    {myTeams.map(m => (
+                      <Link
+                        key={m.team_id}
+                        href={`/teams/${m.teams.id}`}
+                        className="block font-condensed font-semibold tracking-widest uppercase text-sm px-4 py-3 transition-colors text-cream-dark hover:text-dirt hover:bg-dirt/10"
+                        style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+                      >
+                        <NavTeamLogo name={m.teams.name} logoUrl={m.teams.logo_url} size={18} />
+                        {m.teams.name}
+                      </Link>
+                    ))}
+                  </>
+                )}
+                <div style={{ borderTop: '1px solid rgba(196,130,42,0.2)', margin: '4px 0' }} />
+                <button
+                  onClick={handleLogOut}
+                  className="block w-full text-left font-condensed font-bold tracking-widest uppercase text-sm px-4 py-3 text-dirt hover:bg-dirt/10 transition-colors"
+                >
+                  Log Out
+                </button>
               </div>
             )}
           </div>
+        ) : (
+          <div className="flex items-center gap-2 ml-2">
+            <Link
+              href="/auth?tab=login"
+              className="font-condensed font-bold tracking-widest uppercase text-sm px-5 py-2 rounded border border-dirt text-dirt hover:bg-dirt/10 transition-colors"
+            >
+              Log In
+            </Link>
+            <Link
+              href="/auth?tab=signup"
+              className="font-condensed font-bold tracking-widest uppercase text-sm px-5 py-2 rounded bg-dirt text-navy hover:bg-dirt-dark transition-colors"
+            >
+              Sign Up
+            </Link>
+          </div>
         )}
-        <div className="flex items-center gap-2 ml-2">
-          {userId ? (
-            <>
-              <Link
-                href="/profile"
-                className="font-condensed font-semibold tracking-widest uppercase text-sm px-3 py-2 rounded text-cream-dark hover:text-dirt hover:bg-dirt/10 transition-colors"
-                style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
-              >
-                {avatarUrl ? (
-                  <img src={avatarUrl} alt="" style={{ width: 26, height: 26, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
-                ) : (
-                  <div style={{ width: 26, height: 26, borderRadius: '50%', background: '#c4822a', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Bebas Neue', sans-serif", fontSize: 10, color: '#0d1f3c', letterSpacing: '0.04em' }}>
-                    {firstName ? firstName[0].toUpperCase() : '?'}
-                  </div>
-                )}
-                {firstName ?? 'My Profile'}
-              </Link>
-              <button
-                onClick={handleLogOut}
-                className="font-condensed font-bold tracking-widest uppercase text-sm px-5 py-2 rounded border border-dirt text-dirt hover:bg-dirt/10 transition-colors"
-              >
-                Log Out
-              </button>
-            </>
-          ) : (
-            <>
-              <Link
-                href="/auth?tab=login"
-                className="font-condensed font-bold tracking-widest uppercase text-sm px-5 py-2 rounded border border-dirt text-dirt hover:bg-dirt/10 transition-colors"
-              >
-                Log In
-              </Link>
-              <Link
-                href="/auth?tab=signup"
-                className="font-condensed font-bold tracking-widest uppercase text-sm px-5 py-2 rounded bg-dirt text-navy hover:bg-dirt-dark transition-colors"
-              >
-                Sign Up
-              </Link>
-            </>
-          )}
-        </div>
       </div>
 
       {/* ── Mobile (below md) ── */}
