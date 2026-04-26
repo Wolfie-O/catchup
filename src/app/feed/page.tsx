@@ -24,6 +24,7 @@ type AuthorProfile = {
   highest_level: string | null
   status: string | null
   role?: string | null
+  coaching_experience?: string | null
 }
 
 type Post = {
@@ -199,7 +200,17 @@ function PostCard({ post, currentUserId, currentUserProfile, distanceMi }: {
 
   const isVerified = (post.author.vouches ?? 0) >= 3
   const authorName = [post.author.first_name, post.author.last_name].filter(Boolean).join(' ') || 'Player'
-  const authorMeta = [post.author.highest_level, post.author.status].filter(Boolean).join(' · ')
+  const authorRole = post.author.role ?? null
+  const authorMeta = (() => {
+    if (authorRole === 'player' || authorRole === 'both') {
+      return [post.author.highest_level, post.author.status].filter(Boolean).join(' · ')
+    }
+    if (authorRole === 'coach') {
+      return ['Coach', post.author.coaching_experience ? `${post.author.coaching_experience} exp` : null].filter(Boolean).join(' · ')
+    }
+    if (authorRole === 'parent') return 'Parent'
+    return ''
+  })()
 
   async function toggleLike() {
     if (liked) {
@@ -233,7 +244,7 @@ function PostCard({ post, currentUserId, currentUserProfile, distanceMi }: {
       const authorIds = [...new Set(raw.map((c: { user_id: string }) => c.user_id))]
       const { data: profilesData } = await supabase
         .from('profiles')
-        .select('id, first_name, last_name, avatar_url, vouches, highest_level, status, role')
+        .select('id, first_name, last_name, avatar_url, vouches, highest_level, status, role, coaching_experience')
         .in('id', authorIds)
 
       const profileMap: Record<string, AuthorProfile> = {}
@@ -621,7 +632,7 @@ export default function FeedPage() {
     // 2. Fetch author profiles
     const { data: authorsData } = await supabase
       .from('profiles')
-      .select('id, first_name, last_name, avatar_url, vouches, highest_level, status, role')
+      .select('id, first_name, last_name, avatar_url, vouches, highest_level, status, role, coaching_experience')
       .in('id', authorIds)
 
     const authorMap: Record<string, AuthorProfile> = {}
@@ -702,7 +713,7 @@ export default function FeedPage() {
 
         const { data: authorData } = await supabase
           .from('profiles')
-          .select('id, first_name, last_name, avatar_url, vouches, highest_level, status, role')
+          .select('id, first_name, last_name, avatar_url, vouches, highest_level, status, role, coaching_experience')
           .eq('id', raw.user_id)
           .single()
 
