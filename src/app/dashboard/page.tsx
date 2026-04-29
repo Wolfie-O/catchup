@@ -29,6 +29,7 @@ type TeamWithEvent = {
   logoUrl: string | null
   myRole: string
   nextEvent: { title: string; event_date: string } | null
+  primaryColor: string
 }
 
 type RecentPost = {
@@ -172,12 +173,12 @@ function RoleBadge({ role }: { role: string | null }) {
   return null
 }
 
-function TeamLogo({ name, logoUrl, size = 48 }: { name: string; logoUrl: string | null; size?: number }) {
+function TeamLogo({ name, logoUrl, size = 48, color = '#c4822a' }: { name: string; logoUrl: string | null; size?: number; color?: string }) {
   const initials = name.split(' ').map(w => w[0]).filter(Boolean).slice(0, 2).join('').toUpperCase() || '?'
   if (logoUrl) return <img src={logoUrl} alt="" style={{ width: size, height: size, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
   return (
     <div style={{
-      width: size, height: size, borderRadius: '50%', background: '#c4822a', flexShrink: 0,
+      width: size, height: size, borderRadius: '50%', background: color, flexShrink: 0,
       display: 'flex', alignItems: 'center', justifyContent: 'center',
       fontFamily: "'Bebas Neue', sans-serif", fontSize: Math.round(size * 0.36),
       color: '#0d1f3c', letterSpacing: '0.04em',
@@ -286,7 +287,7 @@ export default function DashboardPage() {
       // 4. Parallel batch
       const [catchRes, teamsRes, postsRes, sentRes, receivedRes] = await Promise.all([
         supabase.from('catch_requests').select('id', { count: 'exact', head: true }).eq('receiver_id', uid).eq('status', 'pending'),
-        supabase.from('team_members').select('team_id, role, teams(id, name, logo_url)').eq('user_id', uid).eq('status', 'active'),
+        supabase.from('team_members').select('team_id, role, teams(id, name, logo_url, primary_color)').eq('user_id', uid).eq('status', 'active'),
         supabase.from('posts').select('id, user_id, content, tag, created_at').order('created_at', { ascending: false }).limit(3),
         supabase.from('follows').select('following_id').eq('follower_id', uid).eq('status', 'accepted'),
         supabase.from('follows').select('follower_id').eq('following_id', uid).eq('status', 'accepted'),
@@ -304,7 +305,7 @@ export default function DashboardPage() {
       setPartnerCount(totalPartners)
 
       // 5. Teams → next events + pending join requests
-      type RawTeamMember = { team_id: string; role: string; teams: { id: string; name: string; logo_url: string | null } }
+      type RawTeamMember = { team_id: string; role: string; teams: { id: string; name: string; logo_url: string | null; primary_color: string | null } }
       const rawTeams = ((teamsRes.data ?? []) as unknown as RawTeamMember[]).filter(m => m.teams != null)
 
       const today = new Date().toISOString().split('T')[0]
@@ -324,6 +325,7 @@ export default function DashboardPage() {
             logoUrl: m.teams.logo_url,
             myRole: m.role,
             nextEvent: ev as { title: string; event_date: string } | null,
+            primaryColor: m.teams.primary_color ?? '#c4822a',
           }
         })
       )
@@ -504,12 +506,12 @@ export default function DashboardPage() {
             ) : (
               <div style={{ display: 'flex', gap: '16px', overflowX: 'auto', paddingBottom: '4px', scrollbarWidth: 'none' }}>
                 {myTeams.map(team => (
-                  <div key={team.teamId} style={{ minWidth: '280px', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(245,237,214,0.1)', borderRadius: '16px', padding: '20px', flexShrink: 0, display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  <div key={team.teamId} style={{ minWidth: '280px', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(245,237,214,0.1)', borderLeft: `3px solid ${team.primaryColor}`, borderRadius: '16px', padding: '20px', flexShrink: 0, display: 'flex', flexDirection: 'column', gap: '12px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                      <TeamLogo name={team.teamName} logoUrl={team.logoUrl} size={48} />
+                      <TeamLogo name={team.teamName} logoUrl={team.logoUrl} size={48} color={team.primaryColor} />
                       <div>
                         <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: '16px', color: '#f5edd6' }}>{team.teamName}</div>
-                        <span style={{ fontSize: '10px', fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', padding: '2px 8px', borderRadius: '99px', background: 'rgba(196,130,42,0.15)', color: '#c4822a', border: '1px solid rgba(196,130,42,0.25)' }}>
+                        <span style={{ fontSize: '10px', fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', padding: '2px 8px', borderRadius: '99px', background: `${team.primaryColor}26`, color: team.primaryColor, border: `1px solid ${team.primaryColor}44` }}>
                           {team.myRole}
                         </span>
                       </div>
@@ -519,7 +521,7 @@ export default function DashboardPage() {
                         ? `📅 Next: ${team.nextEvent.title} · ${formatEventDate(team.nextEvent.event_date)}`
                         : 'No upcoming events'}
                     </div>
-                    <Link href={`/teams/${team.teamId}`} style={{ fontSize: '12px', fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase', color: '#c4822a', textDecoration: 'none' }}>
+                    <Link href={`/teams/${team.teamId}`} style={{ fontSize: '12px', fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase', color: team.primaryColor, textDecoration: 'none' }}>
                       View Team →
                     </Link>
                   </div>

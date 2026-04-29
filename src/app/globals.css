@@ -19,6 +19,12 @@
   --font-body: 'Barlow', sans-serif;
 }
 
+:root {
+  --primary: #c4822a;
+  --secondary: #f5edd6;
+  --primary-rgb: 196, 130, 42;
+}
+
 body {
   background: var(--color-navy);
   color: var(--color-cream);

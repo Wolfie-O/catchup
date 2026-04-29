@@ -6,19 +6,35 @@ import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { AuthenticatedLayout } from '@/app/layout-authenticated'
 import Nav from '@/components/Nav'
+import { applyTeamTheme, resetTeamTheme } from '@/lib/teamTheme'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 type Team = {
   id: string
   name: string
+  tagline: string | null
+  sport: string | null
   level: string | null
   zip_code: string | null
   join_type: 'request' | 'invite'
   bio: string | null
   logo_url: string | null
+  primary_color: string | null
+  secondary_color: string | null
   created_by: string
 }
+
+const SPORT_OPTIONS = [
+  'Baseball', 'Basketball', 'Football', 'Soccer', 'Volleyball', 'Softball',
+  'Hockey', 'Lacrosse', 'Swimming', 'Track & Field', 'Wrestling',
+  'Sales Team', 'Corporate Team', 'Other',
+]
+
+const PRESET_COLORS = [
+  'var(--primary)', '#c0392b', '#2980b9', '#27ae60', '#8e44ad',
+  '#2c3e50', '#e67e22', '#16a085', '#1a1a2e',
+]
 
 type MyMembership = {
   id: string
@@ -129,7 +145,7 @@ function TeamLogo({ url, name, size = 80 }: { url: string | null; name: string; 
   if (url) return <img src={url} alt={name} style={{ width: size, height: size, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
   return (
     <div style={{
-      width: size, height: size, borderRadius: '50%', background: '#c4822a', flexShrink: 0,
+      width: size, height: size, borderRadius: '50%', background: 'var(--primary)', flexShrink: 0,
       display: 'flex', alignItems: 'center', justifyContent: 'center',
       fontFamily: "'Bebas Neue', sans-serif", fontSize: Math.round(size * 0.36),
       color: '#0d1f3c', letterSpacing: '0.05em',
@@ -143,7 +159,7 @@ function PersonAvatar({ url, first, last, size = 36 }: { url: string | null; fir
   if (url) return <img src={url} alt="" style={{ width: size, height: size, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
   return (
     <div style={{
-      width: size, height: size, borderRadius: '50%', background: '#c4822a', flexShrink: 0,
+      width: size, height: size, borderRadius: '50%', background: 'var(--primary)', flexShrink: 0,
       display: 'flex', alignItems: 'center', justifyContent: 'center',
       fontFamily: "'Bebas Neue', sans-serif", fontSize: Math.round(size * 0.38), color: '#0d1f3c',
     }}>
@@ -153,13 +169,13 @@ function PersonAvatar({ url, first, last, size = 36 }: { url: string | null; fir
 }
 
 const EVENT_COLORS: Record<string, string> = {
-  Game: '#48bb78', Practice: '#63b3ed', Tryout: '#c4822a', Other: 'rgba(245,237,214,0.3)',
+  Game: '#48bb78', Practice: '#63b3ed', Tryout: 'var(--primary)', Other: 'rgba(245,237,214,0.3)',
 }
 
 const INPUT: React.CSSProperties = {
   width: '100%', padding: '9px 12px', borderRadius: '8px', fontSize: '13px',
   background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(245,237,214,0.15)',
-  color: '#f5edd6', outline: 'none', boxSizing: 'border-box', fontFamily: "'Barlow', sans-serif",
+  color: 'var(--secondary)', outline: 'none', boxSizing: 'border-box', fontFamily: "'Barlow', sans-serif",
 }
 const SELECT_STYLE: React.CSSProperties = {
   ...INPUT, cursor: 'pointer', appearance: 'none',
@@ -172,7 +188,7 @@ const LABEL: React.CSSProperties = {
   textTransform: 'uppercase', color: 'rgba(245,237,214,0.55)',
 }
 
-function onFocus(e: React.FocusEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) { e.currentTarget.style.borderColor = 'rgba(196,130,42,0.6)' }
+function onFocus(e: React.FocusEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) { e.currentTarget.style.borderColor = 'rgba(var(--primary-rgb),0.6)' }
 function onBlur(e: React.FocusEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) { e.currentTarget.style.borderColor = 'rgba(245,237,214,0.15)' }
 
 // ── Page ──────────────────────────────────────────────────────────────────────
@@ -233,11 +249,15 @@ export default function TeamDetailPage() {
   const [emailInviteSending, setEmailInviteSending] = useState(false)
 
   // ── Settings state ─────────────────────────────────────────────────────────
-  const [setName, setSetName]     = useState('')
-  const [setLevel, setSetLevel]   = useState('')
-  const [setZip, setSetZip]       = useState('')
+  const [setName, setSetName]         = useState('')
+  const [setTagline, setSetTagline]   = useState('')
+  const [setSport, setSetSport]       = useState('')
+  const [setLevel, setSetLevel]       = useState('')
+  const [setZip, setSetZip]           = useState('')
   const [setJoinType, setSetJoinType] = useState<'request' | 'invite'>('request')
-  const [setBio, setSetBio]       = useState('')
+  const [setBio, setSetBio]           = useState('')
+  const [setPrimaryColor, setSetPrimaryColor]     = useState('var(--primary)')
+  const [setSecondaryColor, setSetSecondaryColor] = useState('var(--secondary)')
   const [setLogoFile, setSetLogoFile] = useState<File | null>(null)
   const [setLogoPreview, setSetLogoPreview] = useState<string | null>(null)
   const [settingsSaving, setSettingsSaving] = useState(false)
@@ -280,6 +300,21 @@ export default function TeamDetailPage() {
     return () => subscription.unsubscribe()
   }, [router])
 
+  // ── Apply / reset team theme ──────────────────────────────────────────────
+  useEffect(() => {
+    if (!team) return
+    applyTeamTheme({
+      primaryColor: team.primary_color ?? 'var(--primary)',
+      secondaryColor: team.secondary_color ?? 'var(--secondary)',
+      teamName: team.name,
+      logoUrl: team.logo_url,
+    })
+  }, [team])
+
+  useEffect(() => {
+    return () => resetTeamTheme()
+  }, [])
+
   // ── Fetch team + membership ────────────────────────────────────────────────
   useEffect(() => {
     if (!userId || !teamId) return
@@ -302,10 +337,14 @@ export default function TeamDetailPage() {
         setJoinStatus(m.status === 'active' ? 'active' : 'pending')
         // Pre-fill settings
         setSetName(t.name)
+        setSetTagline(t.tagline ?? '')
+        setSetSport(t.sport ?? '')
         setSetLevel(t.level ?? '')
         setSetZip(t.zip_code ?? '')
         setSetJoinType(t.join_type)
         setSetBio(t.bio ?? '')
+        setSetPrimaryColor(t.primary_color ?? 'var(--primary)')
+        setSetSecondaryColor(t.secondary_color ?? 'var(--secondary)')
       }
 
       setTeamLoading(false)
@@ -754,11 +793,17 @@ export default function TeamDetailPage() {
       }
     }
     const { error } = await supabase.from('teams').update({
-      name: setName.trim(), level: setLevel || null, zip_code: setZip || null,
+      name: setName.trim(), tagline: setTagline.trim() || null, sport: setSport || null,
+      level: setLevel || null, zip_code: setZip || null,
       join_type: setJoinType, bio: setBio.trim() || null, logo_url,
+      primary_color: setPrimaryColor, secondary_color: setSecondaryColor,
     }).eq('id', teamId)
     if (!error) {
-      setTeam(prev => prev ? { ...prev, name: setName, level: setLevel || null, zip_code: setZip || null, join_type: setJoinType, bio: setBio || null, logo_url } : prev)
+      setTeam(prev => prev ? {
+        ...prev, name: setName, tagline: setTagline || null, sport: setSport || null,
+        level: setLevel || null, zip_code: setZip || null, join_type: setJoinType,
+        bio: setBio || null, logo_url, primary_color: setPrimaryColor, secondary_color: setSecondaryColor,
+      } : prev)
       showToast('Team updated!')
     } else {
       showToast('Failed to save.', false)
@@ -787,7 +832,7 @@ export default function TeamDetailPage() {
     return (
       <AuthenticatedLayout>
         <div style={{ minHeight: '100vh', background: '#0d1f3c', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div style={{ width: 40, height: 40, borderRadius: '50%', border: '3px solid rgba(196,130,42,0.2)', borderTopColor: '#c4822a', animation: 'spin 0.7s linear infinite' }} />
+          <div style={{ width: 40, height: 40, borderRadius: '50%', border: '3px solid rgba(var(--primary-rgb),0.2)', borderTopColor: 'var(--primary)', animation: 'spin 0.7s linear infinite' }} />
         </div>
       </AuthenticatedLayout>
     )
@@ -805,37 +850,49 @@ export default function TeamDetailPage() {
   if (!isMember) {
     return (
       <AuthenticatedLayout>
-        <div style={{ minHeight: '100vh', background: '#0d1f3c', color: '#f5edd6', fontFamily: "'Barlow', sans-serif" }}>
+        <div style={{ minHeight: '100vh', background: '#0d1f3c', color: 'var(--secondary)', fontFamily: "'Barlow', sans-serif" }}>
           <Nav />
           <main style={{ maxWidth: '720px', margin: '0 auto', padding: '32px 16px 80px' }}>
 
             {/* Team header */}
-            <div style={{ display: 'flex', gap: '20px', alignItems: 'flex-start', marginBottom: '28px', flexWrap: 'wrap' }}>
-              <TeamLogo url={team.logo_url} name={team.name} size={100} />
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <h1 style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: '38px', letterSpacing: '0.05em', margin: '0 0 6px', lineHeight: 1 }}>
-                  {team.name}
-                </h1>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '8px' }}>
-                  {team.level && (
-                    <span style={{ fontSize: '11px', fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, letterSpacing: '0.06em', color: '#c4822a', background: 'rgba(196,130,42,0.1)', border: '1px solid rgba(196,130,42,0.3)', borderRadius: '4px', padding: '2px 7px' }}>
-                      {team.level}
-                    </span>
+            <div style={{ borderRadius: '16px', marginBottom: '28px', background: 'linear-gradient(135deg, rgba(var(--primary-rgb), 0.15) 0%, transparent 60%)', padding: '20px' }}>
+              <div style={{ display: 'flex', gap: '20px', alignItems: 'flex-start', flexWrap: 'wrap' }}>
+                <TeamLogo url={team.logo_url} name={team.name} size={100} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <h1 style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: '38px', letterSpacing: '0.05em', margin: '0 0 4px', lineHeight: 1 }}>
+                    {team.name}
+                  </h1>
+                  {team.tagline && (
+                    <p style={{ margin: '0 0 8px', fontSize: '13px', color: 'rgba(245,237,214,0.5)', fontFamily: "'Barlow', sans-serif" }}>
+                      {team.tagline}
+                    </p>
+                  )}
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '8px' }}>
+                    {team.sport && (
+                      <span style={{ fontSize: '11px', fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, letterSpacing: '0.06em', color: 'rgba(245,237,214,0.7)', background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(245,237,214,0.15)', borderRadius: '4px', padding: '2px 7px' }}>
+                        {team.sport}
+                      </span>
+                    )}
+                    {team.level && (
+                      <span style={{ fontSize: '11px', fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, letterSpacing: '0.06em', color: 'var(--primary)', background: 'rgba(var(--primary-rgb),0.1)', border: '1px solid rgba(var(--primary-rgb),0.3)', borderRadius: '4px', padding: '2px 7px' }}>
+                        {team.level}
+                      </span>
+                    )}
+                  </div>
+                  <div style={{ fontSize: '13px', color: 'rgba(245,237,214,0.5)', fontFamily: "'Barlow', sans-serif" }}>
+                    {[cityName ?? team.zip_code, `${memberCount} member${memberCount !== 1 ? 's' : ''}`].filter(Boolean).join(' · ')}
+                  </div>
+                  {team.bio && (
+                    <p style={{ margin: '10px 0 0', fontSize: '14px', lineHeight: '1.6', color: 'rgba(245,237,214,0.7)', fontFamily: "'Barlow', sans-serif" }}>
+                      {team.bio}
+                    </p>
                   )}
                 </div>
-                <div style={{ fontSize: '13px', color: 'rgba(245,237,214,0.5)', fontFamily: "'Barlow', sans-serif" }}>
-                  {[cityName ?? team.zip_code, `${memberCount} member${memberCount !== 1 ? 's' : ''}`].filter(Boolean).join(' · ')}
-                </div>
-                {team.bio && (
-                  <p style={{ margin: '10px 0 0', fontSize: '14px', lineHeight: '1.6', color: 'rgba(245,237,214,0.7)', fontFamily: "'Barlow', sans-serif" }}>
-                    {team.bio}
-                  </p>
-                )}
               </div>
             </div>
 
             {/* Join section */}
-            <div style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(196,130,42,0.2)', borderRadius: '12px', padding: '20px', marginBottom: '28px' }}>
+            <div style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(var(--primary-rgb),0.2)', borderRadius: '12px', padding: '20px', marginBottom: '28px' }}>
               {joinStatus === 'active' ? (
                 <p style={{ margin: 0, color: '#48bb78', fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: '15px' }}>✓ You are a member</p>
               ) : joinStatus === 'pending' ? (
@@ -855,12 +912,12 @@ export default function TeamDetailPage() {
                     onClick={handleJoinRequest}
                     style={{
                       padding: '11px 28px', borderRadius: '8px', border: '1px solid #c4822a',
-                      background: 'transparent', color: '#c4822a',
+                      background: 'transparent', color: 'var(--primary)',
                       fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700,
                       letterSpacing: '0.1em', textTransform: 'uppercase', fontSize: '14px',
                       cursor: 'pointer', transition: 'all 0.15s',
                     }}
-                    onMouseEnter={e => { e.currentTarget.style.background = 'rgba(196,130,42,0.1)' }}
+                    onMouseEnter={e => { e.currentTarget.style.background = 'rgba(var(--primary-rgb),0.1)' }}
                     onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
                   >
                     Request to Join
@@ -882,46 +939,58 @@ export default function TeamDetailPage() {
 
   return (
     <AuthenticatedLayout>
-      <div style={{ minHeight: '100vh', background: '#0d1f3c', color: '#f5edd6', fontFamily: "'Barlow', sans-serif" }}>
+      <div style={{ minHeight: '100vh', background: '#0d1f3c', color: 'var(--secondary)', fontFamily: "'Barlow', sans-serif" }}>
         <Nav />
         <main style={{ maxWidth: '860px', margin: '0 auto', padding: '32px 16px 80px' }}>
 
           {/* Team header */}
-          <div style={{ display: 'flex', gap: '20px', alignItems: 'flex-start', marginBottom: '28px', flexWrap: 'wrap' }}>
-            <TeamLogo url={team.logo_url} name={team.name} size={100} />
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
-                <h1 style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: '38px', letterSpacing: '0.05em', margin: '0 0 6px', lineHeight: 1 }}>
-                  {team.name}
-                </h1>
-                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                  {(isAdmin || isCoach) && (
-                    <span style={{ fontSize: '10px', fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, letterSpacing: '0.06em', color: isAdmin ? '#f0b429' : '#63b3ed', background: isAdmin ? 'rgba(240,180,41,0.1)' : 'rgba(99,179,237,0.1)', border: `1px solid ${isAdmin ? 'rgba(240,180,41,0.3)' : 'rgba(99,179,237,0.3)'}`, borderRadius: '4px', padding: '2px 7px' }}>
-                      {isAdmin ? 'Admin' : 'Coach'}
+          <div style={{ borderRadius: '16px', marginBottom: '28px', background: 'linear-gradient(135deg, rgba(var(--primary-rgb), 0.15) 0%, transparent 60%)', padding: '20px' }}>
+            <div style={{ display: 'flex', gap: '20px', alignItems: 'flex-start', flexWrap: 'wrap' }}>
+              <TeamLogo url={team.logo_url} name={team.name} size={100} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
+                  <h1 style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: '38px', letterSpacing: '0.05em', margin: '0 0 4px', lineHeight: 1 }}>
+                    {team.name}
+                  </h1>
+                  <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                    {(isAdmin || isCoach) && (
+                      <span style={{ fontSize: '10px', fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, letterSpacing: '0.06em', color: isAdmin ? '#f0b429' : '#63b3ed', background: isAdmin ? 'rgba(240,180,41,0.1)' : 'rgba(99,179,237,0.1)', border: `1px solid ${isAdmin ? 'rgba(240,180,41,0.3)' : 'rgba(99,179,237,0.3)'}`, borderRadius: '4px', padding: '2px 7px' }}>
+                        {isAdmin ? 'Admin' : 'Coach'}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                {team.tagline && (
+                  <p style={{ margin: '0 0 8px', fontSize: '13px', color: 'rgba(245,237,214,0.5)', fontFamily: "'Barlow', sans-serif" }}>
+                    {team.tagline}
+                  </p>
+                )}
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '6px' }}>
+                  {team.sport && (
+                    <span style={{ fontSize: '11px', fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, letterSpacing: '0.06em', color: 'rgba(245,237,214,0.7)', background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(245,237,214,0.15)', borderRadius: '4px', padding: '2px 7px' }}>
+                      {team.sport}
+                    </span>
+                  )}
+                  {team.level && (
+                    <span style={{ fontSize: '11px', fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, letterSpacing: '0.06em', color: 'var(--primary)', background: 'rgba(var(--primary-rgb),0.1)', border: '1px solid rgba(var(--primary-rgb),0.3)', borderRadius: '4px', padding: '2px 7px' }}>
+                      {team.level}
                     </span>
                   )}
                 </div>
-              </div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '6px' }}>
-                {team.level && (
-                  <span style={{ fontSize: '11px', fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, letterSpacing: '0.06em', color: '#c4822a', background: 'rgba(196,130,42,0.1)', border: '1px solid rgba(196,130,42,0.3)', borderRadius: '4px', padding: '2px 7px' }}>
-                    {team.level}
-                  </span>
+                <div style={{ fontSize: '13px', color: 'rgba(245,237,214,0.5)', fontFamily: "'Barlow', sans-serif" }}>
+                  {[cityName ?? team.zip_code, `${memberCount} member${memberCount !== 1 ? 's' : ''}`].filter(Boolean).join(' · ')}
+                </div>
+                {team.bio && (
+                  <p style={{ margin: '8px 0 0', fontSize: '13px', lineHeight: '1.55', color: 'rgba(245,237,214,0.6)', fontFamily: "'Barlow', sans-serif" }}>
+                    {team.bio}
+                  </p>
                 )}
               </div>
-              <div style={{ fontSize: '13px', color: 'rgba(245,237,214,0.5)', fontFamily: "'Barlow', sans-serif" }}>
-                {[cityName ?? team.zip_code, `${memberCount} member${memberCount !== 1 ? 's' : ''}`].filter(Boolean).join(' · ')}
-              </div>
-              {team.bio && (
-                <p style={{ margin: '8px 0 0', fontSize: '13px', lineHeight: '1.55', color: 'rgba(245,237,214,0.6)', fontFamily: "'Barlow', sans-serif" }}>
-                  {team.bio}
-                </p>
-              )}
             </div>
           </div>
 
           {/* Tab bar */}
-          <div style={{ display: 'flex', gap: '2px', marginBottom: '24px', borderBottom: '1px solid rgba(196,130,42,0.2)', overflowX: 'auto' }}>
+          <div style={{ display: 'flex', gap: '2px', marginBottom: '24px', borderBottom: '1px solid rgba(var(--primary-rgb),0.2)', overflowX: 'auto' }}>
             {([
               { key: 'feed' as Tab, label: 'Feed' },
               { key: 'schedule' as Tab, label: 'Schedule' },
@@ -937,7 +1006,7 @@ export default function TeamDetailPage() {
                   fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: '13px',
                   letterSpacing: '0.08em', textTransform: 'uppercase', whiteSpace: 'nowrap',
                   borderBottom: activeTab === key ? '2px solid #c4822a' : '2px solid transparent',
-                  color: activeTab === key ? '#c4822a' : 'rgba(245,237,214,0.5)',
+                  color: activeTab === key ? 'var(--primary)' : 'rgba(245,237,214,0.5)',
                   transition: 'color 0.15s',
                   marginBottom: '-1px',
                 }}
@@ -952,7 +1021,7 @@ export default function TeamDetailPage() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
 
               {/* Create post */}
-              <div style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(196,130,42,0.2)', borderRadius: '12px', padding: '16px' }}>
+              <div style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(var(--primary-rgb),0.2)', borderRadius: '12px', padding: '16px' }}>
                 <textarea
                   value={newPostText}
                   onChange={e => setNewPostText(e.target.value)}
@@ -975,7 +1044,7 @@ export default function TeamDetailPage() {
                     onChange={e => { const f = e.target.files?.[0]; if (!f) return; setNewPostImageFile(f); setNewPostImagePreview(URL.createObjectURL(f)) }}
                   />
                   <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '12px', fontFamily: "'Barlow Condensed', sans-serif", color: 'rgba(245,237,214,0.5)' }}>
-                    <input type="checkbox" checked={newPostPublic} onChange={e => setNewPostPublic(e.target.checked)} style={{ accentColor: '#c4822a' }} />
+                    <input type="checkbox" checked={newPostPublic} onChange={e => setNewPostPublic(e.target.checked)} style={{ accentColor: 'var(--primary)' }} />
                     Post publicly to The Dugout
                   </label>
                   <button
@@ -983,7 +1052,7 @@ export default function TeamDetailPage() {
                     disabled={postSubmitting || !newPostText.trim()}
                     style={{
                       marginLeft: 'auto', padding: '7px 18px', borderRadius: '7px', border: 'none',
-                      background: postSubmitting || !newPostText.trim() ? 'rgba(196,130,42,0.4)' : '#c4822a',
+                      background: postSubmitting || !newPostText.trim() ? 'rgba(var(--primary-rgb),0.4)' : 'var(--primary)',
                       color: '#0d1f3c', fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700,
                       fontSize: '12px', letterSpacing: '0.08em', textTransform: 'uppercase',
                       cursor: postSubmitting || !newPostText.trim() ? 'not-allowed' : 'pointer',
@@ -997,28 +1066,28 @@ export default function TeamDetailPage() {
               {/* Posts list */}
               {feedLoading ? (
                 <div style={{ display: 'flex', justifyContent: 'center', padding: '32px 0' }}>
-                  <div style={{ width: 28, height: 28, borderRadius: '50%', border: '3px solid rgba(196,130,42,0.2)', borderTopColor: '#c4822a', animation: 'spin 0.7s linear infinite' }} />
+                  <div style={{ width: 28, height: 28, borderRadius: '50%', border: '3px solid rgba(var(--primary-rgb),0.2)', borderTopColor: 'var(--primary)', animation: 'spin 0.7s linear infinite' }} />
                 </div>
               ) : feedPosts.length === 0 ? (
                 <p style={{ textAlign: 'center', color: 'rgba(245,237,214,0.35)', fontSize: '14px', padding: '32px 0' }}>
                   No posts yet — be the first to post!
                 </p>
               ) : feedPosts.map(post => (
-                <div key={post.id} style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(196,130,42,0.15)', borderRadius: '12px', overflow: 'hidden' }}>
+                <div key={post.id} style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(var(--primary-rgb),0.15)', borderRadius: '12px', overflow: 'hidden' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '12px 14px 8px' }}>
                     <PersonAvatar url={post.authorAvatar} first={post.authorName.split(' ')[0] ?? null} last={post.authorName.split(' ')[1] ?? null} size={34} />
                     <div>
-                      <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: '13px', color: '#f5edd6' }}>{post.authorName}</div>
+                      <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: '13px', color: 'var(--secondary)' }}>{post.authorName}</div>
                       <div style={{ fontSize: '11px', color: 'rgba(245,237,214,0.35)', fontFamily: "'Barlow', sans-serif" }}>{timeAgo(post.created_at)}</div>
                     </div>
                     {post.is_public && <span style={{ marginLeft: 'auto', fontSize: '10px', color: 'rgba(245,237,214,0.35)', fontFamily: "'Barlow Condensed', sans-serif" }}>PUBLIC</span>}
                   </div>
-                  {post.content && <p style={{ margin: 0, padding: '0 14px 12px', fontSize: '14px', lineHeight: '1.6', color: '#f5edd6', fontFamily: "'Barlow', sans-serif", whiteSpace: 'pre-wrap' }}>{post.content}</p>}
+                  {post.content && <p style={{ margin: 0, padding: '0 14px 12px', fontSize: '14px', lineHeight: '1.6', color: 'var(--secondary)', fontFamily: "'Barlow', sans-serif", whiteSpace: 'pre-wrap' }}>{post.content}</p>}
                   {post.image_url && <img src={post.image_url} alt="Post" style={{ width: '100%', maxHeight: 320, objectFit: 'cover', display: 'block' }} />}
                   <div style={{ display: 'flex', alignItems: 'center', padding: '8px 12px', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
                     <button
                       onClick={() => toggleLike(post)}
-                      style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'none', border: 'none', cursor: 'pointer', color: post.userLiked ? '#c4822a' : 'rgba(245,237,214,0.45)', fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 600, fontSize: '13px', padding: '4px 8px', borderRadius: '6px' }}
+                      style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'none', border: 'none', cursor: 'pointer', color: post.userLiked ? 'var(--primary)' : 'rgba(245,237,214,0.45)', fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 600, fontSize: '13px', padding: '4px 8px', borderRadius: '6px' }}
                     >
                       {post.userLiked ? '♥' : '♡'}{post.likeCount > 0 ? ` ${post.likeCount}` : ''}
                     </button>
@@ -1033,18 +1102,18 @@ export default function TeamDetailPage() {
             <div>
               {/* Add event */}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-                <h2 style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: '24px', letterSpacing: '0.05em', margin: 0, color: '#f5edd6' }}>
-                  Upcoming <span style={{ color: '#c4822a' }}>Events</span>
+                <h2 style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: '24px', letterSpacing: '0.05em', margin: 0, color: 'var(--secondary)' }}>
+                  Upcoming <span style={{ color: 'var(--primary)' }}>Events</span>
                 </h2>
                 {canManage && (
-                  <button onClick={() => setShowAddEvent(v => !v)} style={{ padding: '7px 14px', borderRadius: '7px', border: '1px solid rgba(196,130,42,0.4)', background: 'transparent', color: '#c4822a', fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: '12px', letterSpacing: '0.06em', cursor: 'pointer' }}>
+                  <button onClick={() => setShowAddEvent(v => !v)} style={{ padding: '7px 14px', borderRadius: '7px', border: '1px solid rgba(var(--primary-rgb),0.4)', background: 'transparent', color: 'var(--primary)', fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: '12px', letterSpacing: '0.06em', cursor: 'pointer' }}>
                     {showAddEvent ? 'Cancel' : '+ Add Event'}
                   </button>
                 )}
               </div>
 
               {showAddEvent && canManage && (
-                <div style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(196,130,42,0.2)', borderRadius: '12px', padding: '18px', marginBottom: '20px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                <div style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(var(--primary-rgb),0.2)', borderRadius: '12px', padding: '18px', marginBottom: '20px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                     <div>
                       <label style={LABEL}>Title *</label>
@@ -1077,7 +1146,7 @@ export default function TeamDetailPage() {
                     <label style={LABEL}>Notes</label>
                     <textarea value={evNotes} onChange={e => setEvNotes(e.target.value)} placeholder="Bring your own equipment…" rows={2} style={{ ...INPUT, resize: 'vertical' } as React.CSSProperties} onFocus={onFocus} onBlur={onBlur} />
                   </div>
-                  <button onClick={saveEvent} disabled={evSaving || !evTitle.trim() || !evDate} style={{ padding: '9px', borderRadius: '8px', border: 'none', background: evSaving || !evTitle.trim() || !evDate ? 'rgba(196,130,42,0.4)' : '#c4822a', color: '#0d1f3c', fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: '13px', letterSpacing: '0.08em', cursor: evSaving || !evTitle.trim() || !evDate ? 'not-allowed' : 'pointer' }}>
+                  <button onClick={saveEvent} disabled={evSaving || !evTitle.trim() || !evDate} style={{ padding: '9px', borderRadius: '8px', border: 'none', background: evSaving || !evTitle.trim() || !evDate ? 'rgba(var(--primary-rgb),0.4)' : 'var(--primary)', color: '#0d1f3c', fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: '13px', letterSpacing: '0.08em', cursor: evSaving || !evTitle.trim() || !evDate ? 'not-allowed' : 'pointer' }}>
                     {evSaving ? 'Saving…' : 'Save Event'}
                   </button>
                 </div>
@@ -1085,16 +1154,16 @@ export default function TeamDetailPage() {
 
               {eventsLoading ? (
                 <div style={{ display: 'flex', justifyContent: 'center', padding: '32px 0' }}>
-                  <div style={{ width: 28, height: 28, borderRadius: '50%', border: '3px solid rgba(196,130,42,0.2)', borderTopColor: '#c4822a', animation: 'spin 0.7s linear infinite' }} />
+                  <div style={{ width: 28, height: 28, borderRadius: '50%', border: '3px solid rgba(var(--primary-rgb),0.2)', borderTopColor: 'var(--primary)', animation: 'spin 0.7s linear infinite' }} />
                 </div>
               ) : upcomingEvents.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: '48px 20px', background: 'rgba(255,255,255,0.03)', borderRadius: '12px', border: '1px solid rgba(196,130,42,0.1)' }}>
+                <div style={{ textAlign: 'center', padding: '48px 20px', background: 'rgba(255,255,255,0.03)', borderRadius: '12px', border: '1px solid rgba(var(--primary-rgb),0.1)' }}>
                   <p style={{ color: 'rgba(245,237,214,0.35)', fontSize: '14px', margin: 0 }}>No upcoming events — add your first one!</p>
                 </div>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                   {upcomingEvents.map(ev => (
-                    <div key={ev.id} style={{ display: 'flex', gap: '0', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(196,130,42,0.15)', borderRadius: '10px', overflow: 'hidden' }}>
+                    <div key={ev.id} style={{ display: 'flex', gap: '0', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(var(--primary-rgb),0.15)', borderRadius: '10px', overflow: 'hidden' }}>
                       <div style={{ width: '4px', flexShrink: 0, background: EVENT_COLORS[ev.event_type] }} />
                       <div style={{ flex: 1, padding: '12px 14px' }}>
                         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '8px' }}>
@@ -1103,7 +1172,7 @@ export default function TeamDetailPage() {
                               <span style={{ fontSize: '10px', fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, letterSpacing: '0.06em', color: EVENT_COLORS[ev.event_type], background: `${EVENT_COLORS[ev.event_type]}20`, border: `1px solid ${EVENT_COLORS[ev.event_type]}50`, borderRadius: '4px', padding: '1px 6px' }}>
                                 {ev.event_type}
                               </span>
-                              <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: '15px', color: '#f5edd6' }}>{ev.title}</span>
+                              <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: '15px', color: 'var(--secondary)' }}>{ev.title}</span>
                             </div>
                             <div style={{ fontSize: '12px', color: 'rgba(245,237,214,0.5)', fontFamily: "'Barlow', sans-serif" }}>
                               {formatEventDate(ev.event_date)}
@@ -1134,7 +1203,7 @@ export default function TeamDetailPage() {
                         <div key={ev.id} style={{ display: 'flex', gap: '0', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(245,237,214,0.06)', borderRadius: '8px', overflow: 'hidden' }}>
                           <div style={{ width: '3px', flexShrink: 0, background: EVENT_COLORS[ev.event_type] }} />
                           <div style={{ padding: '10px 14px' }}>
-                            <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: '13px', color: '#f5edd6' }}>{ev.title}</div>
+                            <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: '13px', color: 'var(--secondary)' }}>{ev.title}</div>
                             <div style={{ fontSize: '11px', color: 'rgba(245,237,214,0.4)', fontFamily: "'Barlow', sans-serif" }}>{formatEventDate(ev.event_date)}{ev.location ? ` · ${ev.location}` : ''}</div>
                           </div>
                         </div>
@@ -1152,12 +1221,12 @@ export default function TeamDetailPage() {
 
               {/* Active members */}
               <div>
-                <h2 style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: '22px', letterSpacing: '0.05em', margin: '0 0 14px', color: '#f5edd6' }}>
-                  Roster <span style={{ color: '#c4822a' }}>({members.length})</span>
+                <h2 style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: '22px', letterSpacing: '0.05em', margin: '0 0 14px', color: 'var(--secondary)' }}>
+                  Roster <span style={{ color: 'var(--primary)' }}>({members.length})</span>
                 </h2>
                 {rosterLoading ? (
                   <div style={{ display: 'flex', justifyContent: 'center', padding: '24px' }}>
-                    <div style={{ width: 24, height: 24, borderRadius: '50%', border: '2px solid rgba(196,130,42,0.2)', borderTopColor: '#c4822a', animation: 'spin 0.7s linear infinite' }} />
+                    <div style={{ width: 24, height: 24, borderRadius: '50%', border: '2px solid rgba(var(--primary-rgb),0.2)', borderTopColor: 'var(--primary)', animation: 'spin 0.7s linear infinite' }} />
                   </div>
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
@@ -1167,10 +1236,10 @@ export default function TeamDetailPage() {
                         <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 14px', background: 'rgba(255,255,255,0.03)', borderRadius: '8px', border: '1px solid rgba(245,237,214,0.06)' }}>
                           <PersonAvatar url={m.avatar_url} first={m.first_name} last={m.last_name} size={38} />
                           <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: '14px', color: '#f5edd6' }}>{name}</div>
+                            <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: '14px', color: 'var(--secondary)' }}>{name}</div>
                             <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', marginTop: '2px' }}>
                               {(m.positions ?? []).map(pos => (
-                                <span key={pos} style={{ fontSize: '10px', fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, color: '#c4822a', background: 'rgba(196,130,42,0.1)', border: '1px solid rgba(196,130,42,0.3)', borderRadius: '3px', padding: '0 5px' }}>{pos}</span>
+                                <span key={pos} style={{ fontSize: '10px', fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, color: 'var(--primary)', background: 'rgba(var(--primary-rgb),0.1)', border: '1px solid rgba(var(--primary-rgb),0.3)', borderRadius: '3px', padding: '0 5px' }}>{pos}</span>
                               ))}
                               {m.highest_level && <span style={{ fontSize: '11px', color: 'rgba(245,237,214,0.4)', fontFamily: "'Barlow', sans-serif" }}>{m.highest_level}</span>}
                             </div>
@@ -1204,17 +1273,17 @@ export default function TeamDetailPage() {
               {/* Pending requests (admin only) */}
               {isAdmin && pendingMembers.length > 0 && (
                 <div>
-                  <h3 style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: '18px', letterSpacing: '0.05em', margin: '0 0 12px', color: '#f5edd6' }}>
-                    Pending <span style={{ color: '#c4822a' }}>Requests ({pendingMembers.length})</span>
+                  <h3 style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: '18px', letterSpacing: '0.05em', margin: '0 0 12px', color: 'var(--secondary)' }}>
+                    Pending <span style={{ color: 'var(--primary)' }}>Requests ({pendingMembers.length})</span>
                   </h3>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                     {pendingMembers.map(m => {
                       const name = [m.first_name, m.last_name].filter(Boolean).join(' ') || 'Player'
                       return (
-                        <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 14px', background: 'rgba(255,255,255,0.03)', borderRadius: '8px', border: '1px solid rgba(196,130,42,0.15)' }}>
+                        <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 14px', background: 'rgba(255,255,255,0.03)', borderRadius: '8px', border: '1px solid rgba(var(--primary-rgb),0.15)' }}>
                           <PersonAvatar url={m.avatar_url} first={m.first_name} last={m.last_name} size={36} />
                           <div style={{ flex: 1 }}>
-                            <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: '14px', color: '#f5edd6' }}>{name}</div>
+                            <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: '14px', color: 'var(--secondary)' }}>{name}</div>
                             {m.highest_level && <div style={{ fontSize: '11px', color: 'rgba(245,237,214,0.4)' }}>{m.highest_level}</div>}
                           </div>
                           <div style={{ display: 'flex', gap: '6px' }}>
@@ -1230,9 +1299,9 @@ export default function TeamDetailPage() {
 
               {/* Invite link (admin + coach) */}
               {canManage && (
-                <div style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(196,130,42,0.2)', borderRadius: '12px', padding: '18px' }}>
-                  <h3 style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: '18px', letterSpacing: '0.05em', margin: '0 0 10px', color: '#f5edd6' }}>
-                    Invite <span style={{ color: '#c4822a' }}>Players</span>
+                <div style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(var(--primary-rgb),0.2)', borderRadius: '12px', padding: '18px' }}>
+                  <h3 style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: '18px', letterSpacing: '0.05em', margin: '0 0 10px', color: 'var(--secondary)' }}>
+                    Invite <span style={{ color: 'var(--primary)' }}>Players</span>
                   </h3>
                   <p style={{ margin: '0 0 12px', fontSize: '13px', color: 'rgba(245,237,214,0.5)', fontFamily: "'Barlow', sans-serif" }}>
                     Share this link to invite players directly — they'll be added as active members.
@@ -1244,12 +1313,12 @@ export default function TeamDetailPage() {
                         value={`${typeof window !== 'undefined' ? window.location.origin : ''}/teams/${teamId}/join?token=${inviteToken}`}
                         style={{ ...INPUT, flex: 1, fontSize: '12px', color: 'rgba(245,237,214,0.6)', cursor: 'text' }}
                       />
-                      <button onClick={copyInviteLink} style={{ padding: '9px 14px', borderRadius: '7px', border: '1px solid rgba(196,130,42,0.4)', background: copied ? 'rgba(45,90,27,0.5)' : 'transparent', color: copied ? '#48bb78' : '#c4822a', fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: '12px', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                      <button onClick={copyInviteLink} style={{ padding: '9px 14px', borderRadius: '7px', border: '1px solid rgba(var(--primary-rgb),0.4)', background: copied ? 'rgba(45,90,27,0.5)' : 'transparent', color: copied ? '#48bb78' : 'var(--primary)', fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: '12px', cursor: 'pointer', whiteSpace: 'nowrap' }}>
                         {copied ? 'Copied ✓' : 'Copy Link'}
                       </button>
                     </div>
                   ) : (
-                    <button onClick={generateInviteLink} disabled={inviteTokenLoading} style={{ padding: '9px 18px', borderRadius: '7px', border: '1px solid rgba(196,130,42,0.4)', background: 'transparent', color: '#c4822a', fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: '12px', letterSpacing: '0.06em', cursor: inviteTokenLoading ? 'not-allowed' : 'pointer' }}>
+                    <button onClick={generateInviteLink} disabled={inviteTokenLoading} style={{ padding: '9px 18px', borderRadius: '7px', border: '1px solid rgba(var(--primary-rgb),0.4)', background: 'transparent', color: 'var(--primary)', fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: '12px', letterSpacing: '0.06em', cursor: inviteTokenLoading ? 'not-allowed' : 'pointer' }}>
                       {inviteTokenLoading ? 'Generating…' : 'Generate Invite Link'}
                     </button>
                   )}
@@ -1258,9 +1327,9 @@ export default function TeamDetailPage() {
 
               {/* Email invite (admin only) */}
               {isAdmin && (
-                <div style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(196,130,42,0.2)', borderRadius: '12px', padding: '18px' }}>
-                  <h3 style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: '18px', letterSpacing: '0.05em', margin: '0 0 8px', color: '#f5edd6' }}>
-                    Invite by <span style={{ color: '#c4822a' }}>Email</span>
+                <div style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(var(--primary-rgb),0.2)', borderRadius: '12px', padding: '18px' }}>
+                  <h3 style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: '18px', letterSpacing: '0.05em', margin: '0 0 8px', color: 'var(--secondary)' }}>
+                    Invite by <span style={{ color: 'var(--primary)' }}>Email</span>
                   </h3>
                   <p style={{ margin: '0 0 12px', fontSize: '13px', color: 'rgba(245,237,214,0.5)', fontFamily: "'Barlow', sans-serif" }}>
                     Enter email addresses below. Invites will be saved and sent once email is configured.
@@ -1278,7 +1347,7 @@ export default function TeamDetailPage() {
                     disabled={emailInviteSending || !inviteEmails.trim()}
                     style={{
                       padding: '9px 18px', borderRadius: '7px', border: 'none',
-                      background: emailInviteSending || !inviteEmails.trim() ? 'rgba(196,130,42,0.4)' : '#c4822a',
+                      background: emailInviteSending || !inviteEmails.trim() ? 'rgba(var(--primary-rgb),0.4)' : 'var(--primary)',
                       color: '#0d1f3c', fontFamily: "'Barlow Condensed', sans-serif",
                       fontWeight: 700, fontSize: '12px', letterSpacing: '0.08em',
                       textTransform: 'uppercase',
@@ -1298,15 +1367,15 @@ export default function TeamDetailPage() {
 
               {/* LEFT: Chat (60%) */}
               <div style={{ flex: '3 1 340px', minWidth: 0 }}>
-                <h2 style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: '22px', letterSpacing: '0.05em', margin: '0 0 14px', color: '#f5edd6' }}>
-                  Staff <span style={{ color: '#c4822a' }}>Chat</span>
+                <h2 style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: '22px', letterSpacing: '0.05em', margin: '0 0 14px', color: 'var(--secondary)' }}>
+                  Staff <span style={{ color: 'var(--primary)' }}>Chat</span>
                 </h2>
-                <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(196,130,42,0.2)', borderRadius: '12px', display: 'flex', flexDirection: 'column', height: '480px' }}>
+                <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(var(--primary-rgb),0.2)', borderRadius: '12px', display: 'flex', flexDirection: 'column', height: '480px' }}>
                   {/* Messages */}
                   <div style={{ flex: 1, overflowY: 'auto', padding: '14px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
                     {chatLoading ? (
                       <div style={{ display: 'flex', justifyContent: 'center', padding: '32px 0' }}>
-                        <div style={{ width: 24, height: 24, borderRadius: '50%', border: '2px solid rgba(196,130,42,0.2)', borderTopColor: '#c4822a', animation: 'spin 0.7s linear infinite' }} />
+                        <div style={{ width: 24, height: 24, borderRadius: '50%', border: '2px solid rgba(var(--primary-rgb),0.2)', borderTopColor: 'var(--primary)', animation: 'spin 0.7s linear infinite' }} />
                       </div>
                     ) : chatMessages.length === 0 ? (
                       <p style={{ textAlign: 'center', color: 'rgba(245,237,214,0.3)', fontSize: '13px', margin: 'auto 0', fontFamily: "'Barlow', sans-serif" }}>
@@ -1317,7 +1386,7 @@ export default function TeamDetailPage() {
                         <PersonAvatar url={msg.authorAvatar} first={msg.authorName.split(' ')[0] ?? null} last={msg.authorName.split(' ')[1] ?? null} size={30} />
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ display: 'flex', gap: '6px', alignItems: 'baseline', marginBottom: '3px' }}>
-                            <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: '13px', color: msg.user_id === userId ? '#c4822a' : '#f5edd6' }}>
+                            <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: '13px', color: msg.user_id === userId ? 'var(--primary)' : 'var(--secondary)' }}>
                               {msg.user_id === userId ? 'You' : msg.authorName}
                             </span>
                             <span style={{ fontSize: '10px', color: 'rgba(245,237,214,0.3)', fontFamily: "'Barlow', sans-serif" }}>{timeAgo(msg.created_at)}</span>
@@ -1331,7 +1400,7 @@ export default function TeamDetailPage() {
                     <div ref={chatEndRef} />
                   </div>
                   {/* Input */}
-                  <div style={{ borderTop: '1px solid rgba(196,130,42,0.15)', padding: '10px 12px', display: 'flex', gap: '8px' }}>
+                  <div style={{ borderTop: '1px solid rgba(var(--primary-rgb),0.15)', padding: '10px 12px', display: 'flex', gap: '8px' }}>
                     <input
                       type="text"
                       value={chatInput}
@@ -1346,7 +1415,7 @@ export default function TeamDetailPage() {
                       disabled={chatSending || !chatInput.trim()}
                       style={{
                         padding: '8px 14px', borderRadius: '7px', border: 'none',
-                        background: chatSending || !chatInput.trim() ? 'rgba(196,130,42,0.4)' : '#c4822a',
+                        background: chatSending || !chatInput.trim() ? 'rgba(var(--primary-rgb),0.4)' : 'var(--primary)',
                         color: '#0d1f3c', fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700,
                         fontSize: '12px', letterSpacing: '0.06em', cursor: chatSending || !chatInput.trim() ? 'not-allowed' : 'pointer',
                       }}
@@ -1360,12 +1429,12 @@ export default function TeamDetailPage() {
               {/* RIGHT: Posts (40%) */}
               <div style={{ flex: '2 1 240px', minWidth: 0 }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
-                  <h2 style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: '22px', letterSpacing: '0.05em', margin: 0, color: '#f5edd6' }}>
-                    Notes & <span style={{ color: '#c4822a' }}>Plans</span>
+                  <h2 style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: '22px', letterSpacing: '0.05em', margin: 0, color: 'var(--secondary)' }}>
+                    Notes & <span style={{ color: 'var(--primary)' }}>Plans</span>
                   </h2>
                   <button
                     onClick={() => setShowNewCoachPost(v => !v)}
-                    style={{ padding: '5px 12px', borderRadius: '6px', border: '1px solid rgba(196,130,42,0.4)', background: 'transparent', color: '#c4822a', fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: '12px', letterSpacing: '0.06em', cursor: 'pointer' }}
+                    style={{ padding: '5px 12px', borderRadius: '6px', border: '1px solid rgba(var(--primary-rgb),0.4)', background: 'transparent', color: 'var(--primary)', fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: '12px', letterSpacing: '0.06em', cursor: 'pointer' }}
                   >
                     {showNewCoachPost ? 'Cancel' : '+ New'}
                   </button>
@@ -1373,7 +1442,7 @@ export default function TeamDetailPage() {
 
                 {/* New post form */}
                 {showNewCoachPost && (
-                  <div style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(196,130,42,0.2)', borderRadius: '10px', padding: '14px', marginBottom: '14px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <div style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(var(--primary-rgb),0.2)', borderRadius: '10px', padding: '14px', marginBottom: '14px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
                     <input
                       type="text"
                       value={cpTitle}
@@ -1395,14 +1464,14 @@ export default function TeamDetailPage() {
                         <button
                           key={t}
                           onClick={() => setCpType(t)}
-                          style={{ flex: 1, padding: '6px', borderRadius: '6px', cursor: 'pointer', fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: '11px', letterSpacing: '0.06em', border: cpType === t ? '1px solid #c4822a' : '1px solid rgba(245,237,214,0.18)', background: cpType === t ? 'rgba(196,130,42,0.15)' : 'transparent', color: cpType === t ? '#c4822a' : 'rgba(245,237,214,0.5)' }}
+                          style={{ flex: 1, padding: '6px', borderRadius: '6px', cursor: 'pointer', fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: '11px', letterSpacing: '0.06em', border: cpType === t ? '1px solid #c4822a' : '1px solid rgba(245,237,214,0.18)', background: cpType === t ? 'rgba(var(--primary-rgb),0.15)' : 'transparent', color: cpType === t ? 'var(--primary)' : 'rgba(245,237,214,0.5)' }}
                         >
                           {t === 'note' ? 'Note' : 'Practice Plan'}
                         </button>
                       ))}
                     </div>
                     <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '12px', fontFamily: "'Barlow Condensed', sans-serif", color: 'rgba(245,237,214,0.6)' }}>
-                      <input type="checkbox" checked={cpPinned} onChange={e => setCpPinned(e.target.checked)} style={{ accentColor: '#c4822a' }} />
+                      <input type="checkbox" checked={cpPinned} onChange={e => setCpPinned(e.target.checked)} style={{ accentColor: 'var(--primary)' }} />
                       Pin to top
                     </label>
                     <button
@@ -1410,7 +1479,7 @@ export default function TeamDetailPage() {
                       disabled={cpSubmitting || !cpContent.trim()}
                       style={{
                         padding: '8px', borderRadius: '7px', border: 'none',
-                        background: cpSubmitting || !cpContent.trim() ? 'rgba(196,130,42,0.4)' : '#c4822a',
+                        background: cpSubmitting || !cpContent.trim() ? 'rgba(var(--primary-rgb),0.4)' : 'var(--primary)',
                         color: '#0d1f3c', fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700,
                         fontSize: '12px', letterSpacing: '0.08em', textTransform: 'uppercase',
                         cursor: cpSubmitting || !cpContent.trim() ? 'not-allowed' : 'pointer',
@@ -1428,7 +1497,7 @@ export default function TeamDetailPage() {
                       No notes yet — add a practice plan or note
                     </p>
                   ) : coachPosts.map(post => (
-                    <div key={post.id} style={{ background: 'rgba(255,255,255,0.04)', border: `1px solid ${post.pinned ? 'rgba(196,130,42,0.4)' : 'rgba(196,130,42,0.15)'}`, borderRadius: '10px', padding: '12px 14px' }}>
+                    <div key={post.id} style={{ background: 'rgba(255,255,255,0.04)', border: `1px solid ${post.pinned ? 'rgba(var(--primary-rgb),0.4)' : 'rgba(var(--primary-rgb),0.15)'}`, borderRadius: '10px', padding: '12px 14px' }}>
                       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '8px', marginBottom: '6px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
                           {post.pinned && <span style={{ fontSize: '12px' }}>📌</span>}
@@ -1436,7 +1505,7 @@ export default function TeamDetailPage() {
                             {post.post_type === 'practice_plan' ? 'Practice Plan' : 'Note'}
                           </span>
                           {post.title && (
-                            <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: '14px', color: '#f5edd6' }}>{post.title}</span>
+                            <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: '14px', color: 'var(--secondary)' }}>{post.title}</span>
                           )}
                         </div>
                         {post.user_id === userId && (
@@ -1468,22 +1537,22 @@ export default function TeamDetailPage() {
           {activeTab === 'settings' && isAdmin && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '28px' }}>
 
-              {/* Edit form */}
-              <div style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(196,130,42,0.2)', borderRadius: '12px', padding: '22px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                <h2 style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: '22px', letterSpacing: '0.05em', margin: 0, color: '#f5edd6' }}>
-                  Edit <span style={{ color: '#c4822a' }}>Team</span>
+              {/* ── TEAM IDENTITY ── */}
+              <div style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(var(--primary-rgb),0.2)', borderRadius: '12px', padding: '22px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                <h2 style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: '22px', letterSpacing: '0.05em', margin: 0, color: 'var(--secondary)' }}>
+                  Team <span style={{ color: 'var(--primary)' }}>Identity</span>
                 </h2>
 
                 {/* Logo */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-                  <button type="button" onClick={() => settingsLogoRef.current?.click()} style={{ width: 72, height: 72, borderRadius: '50%', overflow: 'hidden', border: '2px dashed rgba(196,130,42,0.4)', background: 'transparent', cursor: 'pointer', padding: 0 }}>
+                  <button type="button" onClick={() => settingsLogoRef.current?.click()} style={{ width: 72, height: 72, borderRadius: '50%', overflow: 'hidden', border: '2px dashed rgba(var(--primary-rgb),0.4)', background: 'transparent', cursor: 'pointer', padding: 0 }}>
                     {setLogoPreview || team.logo_url ? (
                       <img src={setLogoPreview ?? team.logo_url!} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                     ) : (
-                      <div style={{ width: '100%', height: '100%', background: '#c4822a', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Bebas Neue', sans-serif", fontSize: 26, color: '#0d1f3c' }}>{getInitials(team.name)}</div>
+                      <div style={{ width: '100%', height: '100%', background: 'var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Bebas Neue', sans-serif", fontSize: 26, color: '#0d1f3c' }}>{getInitials(team.name)}</div>
                     )}
                   </button>
-                  <span style={{ fontSize: '12px', color: 'rgba(245,237,214,0.4)', fontFamily: "'Barlow Condensed', sans-serif' " }}>Click to change logo</span>
+                  <span style={{ fontSize: '12px', color: 'rgba(245,237,214,0.4)', fontFamily: "'Barlow Condensed', sans-serif" }}>Click to change logo</span>
                   <input ref={settingsLogoRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; if (!f) return; setSetLogoFile(f); setSetLogoPreview(URL.createObjectURL(f)) }} />
                 </div>
 
@@ -1491,6 +1560,70 @@ export default function TeamDetailPage() {
                   <label style={LABEL}>Team Name</label>
                   <input type="text" value={setName} onChange={e => setSetName(e.target.value)} style={INPUT} onFocus={onFocus} onBlur={onBlur} />
                 </div>
+
+                <div>
+                  <label style={LABEL}>Tagline</label>
+                  <input type="text" value={setTagline} onChange={e => setSetTagline(e.target.value)} placeholder="e.g. Waterford Elite 14U" maxLength={80} style={INPUT} onFocus={onFocus} onBlur={onBlur} />
+                </div>
+
+                <div>
+                  <label style={LABEL}>Sport / Type</label>
+                  <select value={setSport} onChange={e => setSetSport(e.target.value)} style={{ ...SELECT_STYLE, width: '100%' }} onFocus={onFocus} onBlur={onBlur}>
+                    <option value="" style={{ background: '#0d1f3c' }}>Select sport or type…</option>
+                    {SPORT_OPTIONS.map(s => <option key={s} value={s} style={{ background: '#0d1f3c' }}>{s}</option>)}
+                  </select>
+                </div>
+              </div>
+
+              {/* ── TEAM COLORS ── */}
+              <div style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(var(--primary-rgb),0.2)', borderRadius: '12px', padding: '22px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                <h2 style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: '22px', letterSpacing: '0.05em', margin: 0, color: 'var(--secondary)' }}>
+                  Team <span style={{ color: 'var(--primary)' }}>Colors</span>
+                </h2>
+
+                {/* Primary */}
+                <div>
+                  <label style={LABEL}>Primary Color</label>
+                  <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center', marginBottom: '8px' }}>
+                    {PRESET_COLORS.map(color => (
+                      <button key={color} type="button" onClick={() => setSetPrimaryColor(color)} style={{ width: 28, height: 28, borderRadius: '50%', background: color, border: setPrimaryColor === color ? '3px solid var(--secondary)' : '2px solid rgba(245,237,214,0.15)', cursor: 'pointer', flexShrink: 0, transition: 'border 0.1s' }} />
+                    ))}
+                    <div style={{ width: 28, height: 28, borderRadius: '50%', background: setPrimaryColor, border: '2px solid rgba(245,237,214,0.35)', flexShrink: 0, marginLeft: '4px' }} title="Current" />
+                  </div>
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                    <span style={{ fontSize: '11px', color: 'rgba(245,237,214,0.5)', fontFamily: "'Barlow Condensed', sans-serif", whiteSpace: 'nowrap' }}>Custom hex:</span>
+                    <input type="text" value={setPrimaryColor} onChange={e => setSetPrimaryColor(e.target.value)} placeholder="#c4822a" maxLength={7} style={{ ...INPUT, width: '110px', fontSize: '12px', fontFamily: 'monospace' }} onFocus={onFocus} onBlur={onBlur} />
+                  </div>
+                </div>
+
+                {/* Secondary */}
+                <div>
+                  <label style={LABEL}>Secondary Color</label>
+                  <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center', marginBottom: '8px' }}>
+                    {PRESET_COLORS.map(color => (
+                      <button key={color} type="button" onClick={() => setSetSecondaryColor(color)} style={{ width: 28, height: 28, borderRadius: '50%', background: color, border: setSecondaryColor === color ? '3px solid rgba(245,237,214,0.9)' : '2px solid rgba(245,237,214,0.15)', cursor: 'pointer', flexShrink: 0, transition: 'border 0.1s' }} />
+                    ))}
+                    <div style={{ width: 28, height: 28, borderRadius: '50%', background: setSecondaryColor, border: '2px solid rgba(245,237,214,0.35)', flexShrink: 0, marginLeft: '4px' }} title="Current" />
+                  </div>
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                    <span style={{ fontSize: '11px', color: 'rgba(245,237,214,0.5)', fontFamily: "'Barlow Condensed', sans-serif", whiteSpace: 'nowrap' }}>Custom hex:</span>
+                    <input type="text" value={setSecondaryColor} onChange={e => setSetSecondaryColor(e.target.value)} placeholder="#f5edd6" maxLength={7} style={{ ...INPUT, width: '110px', fontSize: '12px', fontFamily: 'monospace' }} onFocus={onFocus} onBlur={onBlur} />
+                  </div>
+                </div>
+
+                {/* Live preview */}
+                <div style={{ borderRadius: '10px', padding: '16px 20px', background: '#0d1f3c', border: '1px solid rgba(245,237,214,0.1)', display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: '11px', color: 'rgba(245,237,214,0.4)', fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase' }}>Preview</span>
+                  <button style={{ padding: '6px 16px', borderRadius: '6px', border: 'none', background: setPrimaryColor, color: '#0d1f3c', fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: '13px', cursor: 'default' }}>Button</button>
+                  <span style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: '20px', letterSpacing: '0.05em', color: setSecondaryColor }}>{setName || 'Team Name'}</span>
+                </div>
+              </div>
+
+              {/* ── OTHER SETTINGS ── */}
+              <div style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(var(--primary-rgb),0.2)', borderRadius: '12px', padding: '22px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                <h2 style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: '22px', letterSpacing: '0.05em', margin: 0, color: 'var(--secondary)' }}>
+                  Other <span style={{ color: 'var(--primary)' }}>Settings</span>
+                </h2>
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                   <div>
@@ -1510,7 +1643,7 @@ export default function TeamDetailPage() {
                   <label style={LABEL}>Who Can Join</label>
                   <div style={{ display: 'flex', gap: '8px' }}>
                     {(['request', 'invite'] as const).map(type => (
-                      <button key={type} type="button" onClick={() => setSetJoinType(type)} style={{ flex: 1, padding: '8px', borderRadius: '7px', cursor: 'pointer', fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: '12px', letterSpacing: '0.06em', border: setJoinType === type ? '1px solid #c4822a' : '1px solid rgba(245,237,214,0.18)', background: setJoinType === type ? 'rgba(196,130,42,0.15)' : 'transparent', color: setJoinType === type ? '#c4822a' : 'rgba(245,237,214,0.5)' }}>
+                      <button key={type} type="button" onClick={() => setSetJoinType(type)} style={{ flex: 1, padding: '8px', borderRadius: '7px', cursor: 'pointer', fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: '12px', letterSpacing: '0.06em', border: setJoinType === type ? '1px solid var(--primary)' : '1px solid rgba(245,237,214,0.18)', background: setJoinType === type ? 'rgba(var(--primary-rgb),0.15)' : 'transparent', color: setJoinType === type ? 'var(--primary)' : 'rgba(245,237,214,0.5)' }}>
                         {type === 'request' ? 'Open to Requests' : 'Invite Only'}
                       </button>
                     ))}
@@ -1522,15 +1655,15 @@ export default function TeamDetailPage() {
                   <textarea value={setBio} onChange={e => setSetBio(e.target.value)} rows={4} style={{ ...INPUT, resize: 'vertical', lineHeight: '1.5' } as React.CSSProperties} onFocus={onFocus} onBlur={onBlur} />
                 </div>
 
-                <button onClick={saveSettings} disabled={settingsSaving || !setName.trim()} style={{ padding: '11px', borderRadius: '8px', border: 'none', background: settingsSaving || !setName.trim() ? 'rgba(196,130,42,0.4)' : '#c4822a', color: '#0d1f3c', fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', fontSize: '13px', cursor: settingsSaving || !setName.trim() ? 'not-allowed' : 'pointer' }}>
-                  {settingsSaving ? 'Saving…' : 'Save Changes'}
+                <button onClick={saveSettings} disabled={settingsSaving || !setName.trim()} style={{ padding: '11px', borderRadius: '8px', border: 'none', background: settingsSaving || !setName.trim() ? 'rgba(var(--primary-rgb),0.4)' : 'var(--primary)', color: '#0d1f3c', fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', fontSize: '13px', cursor: settingsSaving || !setName.trim() ? 'not-allowed' : 'pointer' }}>
+                  {settingsSaving ? 'Saving…' : 'Save All Changes'}
                 </button>
               </div>
 
               {/* Transfer admin */}
               {members.filter(m => m.user_id !== userId).length > 0 && (
-                <div style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(196,130,42,0.15)', borderRadius: '12px', padding: '20px' }}>
-                  <h3 style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: '18px', letterSpacing: '0.05em', margin: '0 0 10px', color: '#f5edd6' }}>Transfer Admin</h3>
+                <div style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(var(--primary-rgb),0.15)', borderRadius: '12px', padding: '20px' }}>
+                  <h3 style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: '18px', letterSpacing: '0.05em', margin: '0 0 10px', color: 'var(--secondary)' }}>Transfer Admin</h3>
                   <p style={{ margin: '0 0 12px', fontSize: '13px', color: 'rgba(245,237,214,0.5)', fontFamily: "'Barlow', sans-serif" }}>Transfer admin rights to another member. You will become a regular player.</p>
                   <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                     <select value={transferTo} onChange={e => setTransferTo(e.target.value)} style={{ ...SELECT_STYLE, flex: 1 }} onFocus={onFocus} onBlur={onBlur}>
@@ -1541,7 +1674,7 @@ export default function TeamDetailPage() {
                         </option>
                       ))}
                     </select>
-                    <button onClick={transferAdmin} disabled={!transferTo} style={{ padding: '9px 16px', borderRadius: '7px', border: '1px solid rgba(196,130,42,0.4)', background: 'transparent', color: !transferTo ? 'rgba(245,237,214,0.3)' : '#c4822a', fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: '12px', cursor: !transferTo ? 'not-allowed' : 'pointer' }}>
+                    <button onClick={transferAdmin} disabled={!transferTo} style={{ padding: '9px 16px', borderRadius: '7px', border: '1px solid rgba(var(--primary-rgb),0.4)', background: 'transparent', color: !transferTo ? 'rgba(245,237,214,0.3)' : 'var(--primary)', fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: '12px', cursor: !transferTo ? 'not-allowed' : 'pointer' }}>
                       Transfer
                     </button>
                   </div>
@@ -1568,7 +1701,7 @@ export default function TeamDetailPage() {
           position: 'fixed', bottom: '90px', right: '24px', zIndex: 300,
           padding: '12px 18px', borderRadius: '8px', fontSize: '14px',
           fontFamily: "'Barlow Condensed', sans-serif", letterSpacing: '0.03em',
-          color: '#f5edd6', boxShadow: '0 4px 16px rgba(0,0,0,0.5)',
+          color: 'var(--secondary)', boxShadow: '0 4px 16px rgba(0,0,0,0.5)',
           background: toast.ok ? 'rgba(45,90,27,0.97)' : 'rgba(180,30,30,0.97)',
           border: toast.ok ? '1px solid rgba(72,187,120,0.4)' : '1px solid rgba(220,60,60,0.4)',
         }}>
